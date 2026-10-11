@@ -1,0 +1,111 @@
+name: UsageLimits
+
+options:
+  bundleIdPrefix: com.AnomalousResearch
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    DEVELOPMENT_TEAM: XPU32D9V4J
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: minimal
+
+targets:
+  UsageLimits:
+    type: application
+    platform: iOS
+    sources:
+      - path: UsageLimits
+      - path: Shared
+    dependencies:
+      - target: UsageLimitsWidget
+        embed: true
+        codeSign: true
+    info:
+      path: Supporting/UsageLimits-Info.plist
+      properties:
+        CFBundleDisplayName: Usage Limits
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: Supporting/UsageLimits.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.AnomalousResearch.UsageLimits
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.AnomalousResearch.UsageLimits.shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.AnomalousResearch.UsageLimits
+        PRODUCT_NAME: UsageLimits
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+
+  UsageLimitsWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: UsageLimitsWidget
+      - path: Shared
+    info:
+      path: Supporting/UsageLimitsWidget-Info.plist
+      properties:
+        CFBundleDisplayName: Usage Limits
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Supporting/UsageLimitsWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.AnomalousResearch.UsageLimits
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.AnomalousResearch.UsageLimits.shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.AnomalousResearch.UsageLimits.Widget
+        PRODUCT_NAME: UsageLimitsWidget
+        SKIP_INSTALL: YES
+        ENABLE_PREVIEWS: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+
+schemes:
+  UsageLimits:
+    build:
+      targets:
+        UsageLimits: all
+        UsageLimitsWidget: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

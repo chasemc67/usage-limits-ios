@@ -1,0 +1,61 @@
+import Foundation
+
+struct GrokBotFetcher: ServiceFetcher {
+    func fetch() async -> ServiceSnapshot {
+        guard let raw = TokenStore.cursorSessionToken,
+              let cookie = CursorAuth.normalizedCookieValue(raw),
+              let jwt = CursorAuth.jwt(from: cookie) else {
+            return .failure(.grokBot, ServiceError.notSignedIn)
+        }
+
+        do {
+            let result = try await HTTP.send(CursorAuth.dashboardRequest("GetSandUsageStatus", jwt: jwt))
+            if result.status == 401 || result.status == 403 {
+                throw ServiceError.sessionExpired
+            }
+            guard result.isSuccess else { throw result.serviceError() }
+            guard let json = result.json, json.object != nil else {
+                throw ServiceError.invalidResponse("GetSandUsageStatus")
+            }
+            return Self.snapshot(from: json)
+        } catch {
+            return .failure(.grokBot, error)
+        }
+    }
+
+    static func snapshot(from json: JSONValue) -> ServiceSnapshot {
+        // proto3 JSON omits zero values, so a missing usagePercent means 0.
+        let used = json["usagePercent"].double ?? 0
+        let periodStart = json["currentPeriodStart"].date
+
+        var detail: String?
+        if let periodStart {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            detail = "Period started \(formatter.string(from: periodStart))"
+        }
+
+        let window = UsageWindow(id: "grok.weekly",
+                                 label: "Weekly",
+                                 usedPercent: used,
+                                 resetsAt: json["nextResetTimestampUtc"].date,
+                                 windowSeconds: 604_800,
+                                 detail: detail)
+
+        var extras: [String] = []
+        if let plan = json["grokPlanLabel"].nonEmptyString {
+            extras.append("Plan: \(plan)")
+        }
+        if let cursorPlan = json["cursorPlanName"].nonEmptyString {
+            extras.append("Cursor plan: \(cursorPlan)")
+        }
+        let onDemand = json["onDemandSettings"]["enabled"].bool ?? false
+        extras.append("On-demand: \(onDemand ? "enabled" : "disabled")")
+        if json["hasAvailableUsage"].bool == false {
+            extras.append("No usage available until reset")
+        }
+
+        return ServiceSnapshot(kind: .grokBot, windows: [window], extras: extras, fetchedAt: Date(), error: nil)
+    }
+}
