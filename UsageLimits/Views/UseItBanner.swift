@@ -10,10 +10,11 @@ struct UseItBannerStack: View {
             let nudges = UseItNudge
                 .nudges(snapshots: model.snapshots, isSignedIn: { model.isSignedIn($0) }, now: context.date)
                 .filter { !model.isDismissed($0) }
+                .prefix(ResetAlertConfig.standard.maxVisibleAlerts)
 
             if !nudges.isEmpty {
                 VStack(spacing: 10) {
-                    ForEach(nudges) { nudge in
+                    ForEach(Array(nudges)) { nudge in
                         UseItBanner(nudge: nudge, now: context.date) {
                             onSelect(nudge.kind)
                         } onDismiss: {

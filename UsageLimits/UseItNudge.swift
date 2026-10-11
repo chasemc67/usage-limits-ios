@@ -6,33 +6,24 @@ struct UseItNudge: Identifiable, Hashable {
     let window: UsageWindow
     let resetsAt: Date
     let timeToReset: TimeInterval
-
-    /// Show when the window is in its last 15% and at least 40% is unused.
-    static let resetFraction = 0.15
-    static let minimumRemainingPercent = 40.0
+    /// Whether the service reports more than one window, so the label is needed to tell them apart.
+    let showsWindowLabel: Bool
 
     var id: String { dismissalKey }
 
     var remainingPercent: Double { window.remainingPercent }
 
-    /// serviceKind + window label + resetsAt (to the minute, since some APIs jitter by sub-seconds).
+    /// serviceKind + window id + resetsAt (to the minute, since some APIs jitter by sub-seconds).
     var dismissalKey: String {
         let minute = Int((resetsAt.timeIntervalSince1970 / 60).rounded())
-        return "\(kind.rawValue)|\(window.label)|\(minute)"
+        return "\(kind.rawValue)|\(window.id)|\(minute)"
     }
 
-    /// "Claude weekly (all models) resets in 18h — 76% left. Use it!"
+    /// "Grok Bot: 80% left, resets in 18h" or "Claude (Weekly Opus): 62% left, resets in 18h".
     func message(now: Date) -> String {
         let countdown = Self.humanCountdown(resetsAt.timeIntervalSince(now))
-        return "\(kind.displayName) \(sentenceLabel) resets in \(countdown) — \(Fmt.percent(remainingPercent)) left. Use it!"
-    }
-
-    /// Lowercases a leading capitalized word ("Weekly Opus" -> "weekly Opus") but keeps acronyms.
-    private var sentenceLabel: String {
-        let label = window.label
-        guard let first = label.first, label.count > 1,
-              label[label.index(after: label.startIndex)].isLowercase else { return label }
-        return first.lowercased() + label.dropFirst()
+        let name = showsWindowLabel ? "\(kind.displayName) (\(window.label))" : kind.displayName
+        return "\(name): \(Fmt.percent(remainingPercent)) left, resets in \(countdown)"
     }
 
     /// "2d 5h", "18h", "1h 20m", "42m", "<1m".
@@ -51,18 +42,22 @@ struct UseItNudge: Identifiable, Hashable {
     /// Nudges for every qualifying window across signed-in services, soonest reset first.
     static func nudges(snapshots: [ServiceKind: ServiceSnapshot],
                        isSignedIn: (ServiceKind) -> Bool,
-                       now: Date) -> [UseItNudge] {
+                       now: Date,
+                       config: ResetAlertConfig = .standard) -> [UseItNudge] {
         var result: [UseItNudge] = []
         for kind in ServiceKind.allCases where isSignedIn(kind) {
             guard let snapshot = snapshots[kind] else { continue }
             for window in snapshot.windows {
                 guard let resetsAt = window.resetsAt,
-                      let windowSeconds = window.windowSeconds, windowSeconds > 0 else { continue }
+                      let leadTime = config.leadTime(for: ResetWindowKind.infer(window, service: kind, config: config))
+                else { continue }
                 let timeToReset = resetsAt.timeIntervalSince(now)
                 guard timeToReset > 0,
-                      timeToReset <= Double(windowSeconds) * resetFraction,
-                      window.remainingPercent >= minimumRemainingPercent else { continue }
-                result.append(UseItNudge(kind: kind, window: window, resetsAt: resetsAt, timeToReset: timeToReset))
+                      timeToReset <= leadTime,
+                      window.remainingPercent >= config.minimumRemainingPercent else { continue }
+                result.append(UseItNudge(kind: kind, window: window, resetsAt: resetsAt,
+                                         timeToReset: timeToReset,
+                                         showsWindowLabel: snapshot.windows.count > 1))
             }
         }
         return result.sorted {
