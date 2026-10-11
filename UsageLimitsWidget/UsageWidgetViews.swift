@@ -10,9 +10,10 @@ struct UsageWidgetView: View {
             .containerBackground(for: .widget) {
                 switch family {
                 case .systemSmall, .systemMedium, .systemLarge:
-                    WidgetBackground()
+                    TerminalBackground()
                 default:
-                    Color.clear
+                    // Removed by the system on the Lock Screen.
+                    TMX.bg
                 }
             }
     }
@@ -38,19 +39,6 @@ struct UsageWidgetView: View {
     }
 }
 
-private struct WidgetBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        LinearGradient(
-            colors: colorScheme == .dark
-                ? [Color(red: 0.10, green: 0.10, blue: 0.18), Color(red: 0.05, green: 0.05, blue: 0.09)]
-                : [Color.white, Color(red: 0.94, green: 0.95, blue: 1.0)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing)
-    }
-}
-
 private struct EmptyWidgetView: View {
     var compact = false
 
@@ -58,13 +46,32 @@ private struct EmptyWidgetView: View {
         VStack(spacing: 6) {
             Image(systemName: "gauge.with.dots.needle.33percent")
                 .font(compact ? .title3 : .title)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TMX.orange)
+                .widgetAccentable()
             Text("Open Token Maxx to sign in")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(TMX.font(.caption))
+                .foregroundStyle(TMX.dim)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Orange glyph + uppercase service name.
+private struct ServiceTag: View {
+    let kind: ServiceKind
+    var size: CGFloat = 11
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ServiceIcon(kind: kind, size: size + 3)
+                .widgetAccentable()
+            Text(kind.displayName.uppercased())
+                .font(TMX.font(size: size, weight: .bold))
+                .tracking(0.8)
+                .foregroundStyle(TMX.hi)
+                .lineLimit(1)
+        }
     }
 }
 
@@ -75,39 +82,38 @@ private struct SmallWidgetView: View {
 
     var body: some View {
         if let item = entry.focus {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    ServiceIcon(kind: item.kind, size: 20)
-                    Text(item.kind.displayName)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 0) {
+                    ServiceTag(kind: item.kind, size: 10)
                     Spacer(minLength: 0)
                 }
 
-                RingGauge(usedPercent: item.window.usedPercent, lineWidth: 9) {
-                    VStack(spacing: 0) {
-                        Text(Fmt.percent(item.window.usedPercent))
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.6)
-                        Text(item.window.label)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .padding(.horizontal, 10)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text(item.window.label.lowercased())
+                    .font(TMX.font(size: 11))
+                    .foregroundStyle(TMX.fg)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Spacer(minLength: 0)
+
+                Text(Fmt.percent(item.window.usedPercent))
+                    .font(TMX.font(size: 40, weight: .bold))
+                    .tracking(-1.5)
+                    .monospacedDigit()
+                    .foregroundStyle(UsageColor.color(for: item.window.usedPercent))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .widgetAccentable()
+
+                UsageBar(usedPercent: item.window.usedPercent, height: 8)
 
                 if let resetsAt = item.window.resetsAt {
                     Text(Fmt.resetsIn(resetsAt, now: entry.date))
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
+                        .font(TMX.font(size: 10))
+                        .foregroundStyle(TMX.resetColor(item.window, kind: item.kind, now: entry.date))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                        .frame(maxWidth: .infinity)
+                        .padding(.top, 2)
                 }
             }
         } else {
@@ -126,9 +132,13 @@ private struct MediumWidgetView: View {
         if items.isEmpty {
             EmptyWidgetView()
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(items) { item in
-                    WidgetWindowRow(item: item, now: entry.date, showService: true)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 {
+                        DashedDivider()
+                            .padding(.vertical, 6)
+                    }
+                    WidgetWindowRow(item: item, now: entry.date)
                 }
                 Spacer(minLength: 0)
             }
@@ -146,33 +156,42 @@ private struct LargeWidgetView: View {
         if services.isEmpty {
             EmptyWidgetView()
         } else {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Token Maxx")
-                        .font(.headline)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    HStack(spacing: 6) {
+                        Text("❯")
+                            .foregroundStyle(TMX.orange)
+                            .widgetAccentable()
+                        Text("Token Maxx")
+                            .foregroundStyle(TMX.hi)
+                    }
+                    .font(TMX.font(size: 15, weight: .bold))
                     Spacer()
                     if let updated = entry.lastUpdated {
-                        Text("Updated \(Fmt.relative(updated, now: entry.date))")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                        Text("updated \(Fmt.relative(updated, now: entry.date))")
+                            .font(TMX.font(size: 10))
+                            .foregroundStyle(TMX.dim)
                     }
                 }
 
-                ForEach(services) { snapshot in
-                    VStack(alignment: .leading, spacing: 5) {
+                TerminalDivider()
+
+                ForEach(Array(services.enumerated()), id: \.element.id) { index, snapshot in
+                    if index > 0 {
+                        DashedDivider()
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
-                            ServiceIcon(kind: snapshot.kind, size: 16)
-                            Text(snapshot.kind.displayName)
-                                .font(.caption.weight(.semibold))
+                            ServiceTag(kind: snapshot.kind, size: 11)
                             if snapshot.error != nil {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.caption2)
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(TMX.red)
                             }
                             Spacer()
                         }
                         ForEach(snapshot.windows.prefix(3)) { window in
-                            CompactWindowRow(window: window, now: entry.date)
+                            CompactWindowRow(window: window, kind: snapshot.kind, now: entry.date)
                         }
                     }
                 }
@@ -185,32 +204,37 @@ private struct LargeWidgetView: View {
 private struct WidgetWindowRow: View {
     let item: FocusItem
     let now: Date
-    let showService: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                if showService {
-                    ServiceIcon(kind: item.kind, size: 16)
-                    Text("\(item.kind.displayName) · \(item.window.label)")
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                } else {
-                    Text(item.window.label)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                ServiceIcon(kind: item.kind, size: 13)
+                    .widgetAccentable()
+                Text(item.kind.displayName.uppercased())
+                    .font(TMX.font(size: 11, weight: .bold))
+                    .foregroundStyle(TMX.hi)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text(item.window.label.lowercased())
+                    .font(TMX.font(size: 11))
+                    .foregroundStyle(TMX.dim)
+                    .lineLimit(1)
                 Spacer(minLength: 4)
-                Text(Fmt.percent(item.window.usedPercent))
-                    .font(.caption.weight(.bold).monospacedDigit())
-                    .foregroundStyle(UsageColor.color(for: item.window.usedPercent))
+                if let resetsAt = item.window.resetsAt {
+                    Text(Fmt.resetsIn(resetsAt, now: now))
+                        .font(TMX.font(size: 10))
+                        .foregroundStyle(TMX.resetColor(item.window, kind: item.kind, now: now))
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
             }
-            UsageBar(usedPercent: item.window.usedPercent, height: 6)
-            if let resetsAt = item.window.resetsAt {
-                Text(Fmt.resetsIn(resetsAt, now: now))
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+            HStack(spacing: 8) {
+                UsageBar(usedPercent: item.window.usedPercent, height: 7)
+                Text(Fmt.percent(item.window.usedPercent))
+                    .font(TMX.font(size: 12, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(UsageColor.color(for: item.window.usedPercent))
+                    .frame(width: 40, alignment: .trailing)
             }
         }
     }
@@ -218,23 +242,27 @@ private struct WidgetWindowRow: View {
 
 private struct CompactWindowRow: View {
     let window: UsageWindow
+    let kind: ServiceKind
     let now: Date
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(window.label)
-                .font(.caption2)
+            Text(window.label.lowercased())
+                .font(TMX.font(size: 10))
+                .foregroundStyle(TMX.fg)
                 .lineLimit(1)
-                .frame(width: 92, alignment: .leading)
-            UsageBar(usedPercent: window.usedPercent, height: 5)
+                .frame(width: 96, alignment: .leading)
+                .padding(.leading, 19)
+            UsageBar(usedPercent: window.usedPercent, height: 6)
             Text(Fmt.percent(window.usedPercent))
-                .font(.caption2.weight(.semibold).monospacedDigit())
+                .font(TMX.font(size: 10, weight: .bold))
+                .monospacedDigit()
                 .foregroundStyle(UsageColor.color(for: window.usedPercent))
                 .frame(width: 34, alignment: .trailing)
             if let resetsAt = window.resetsAt {
                 Text(Fmt.compactCountdown(to: resetsAt, now: now))
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
+                    .font(TMX.font(size: 10))
+                    .foregroundStyle(TMX.resetColor(window, kind: kind, now: now))
                     .frame(width: 30, alignment: .trailing)
             }
         }
@@ -252,6 +280,7 @@ private struct CircularAccessoryView: View {
                 Image(systemName: item.kind.iconSystemName)
             } currentValueLabel: {
                 Text("\(Int(item.window.usedPercent.rounded()))")
+                    .font(.system(.body, design: .monospaced, weight: .bold))
                     .monospacedDigit()
             }
             .gaugeStyle(.accessoryCircularCapacity)
@@ -273,10 +302,11 @@ private struct RectangularAccessoryView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Image(systemName: item.kind.iconSystemName)
-                    Text("\(item.kind.displayName) · \(item.window.label)")
+                    Text("\(item.kind.displayName) · \(item.window.label.lowercased())")
                         .lineLimit(1)
                 }
-                .font(.headline)
+                .font(.system(.headline, design: .monospaced, weight: .bold))
+                .minimumScaleFactor(0.7)
                 .widgetAccentable()
 
                 Gauge(value: min(max(item.window.usedPercent, 0), 100), in: 0...100) {
@@ -284,19 +314,21 @@ private struct RectangularAccessoryView: View {
                 }
                 .gaugeStyle(.accessoryLinearCapacity)
 
-                HStack {
+                HStack(spacing: 4) {
                     Text(Fmt.percent(item.window.usedPercent))
+                        .fontWeight(.bold)
                         .monospacedDigit()
                     if let resetsAt = item.window.resetsAt {
                         Text("· \(Fmt.resetsIn(resetsAt, now: entry.date))")
                             .lineLimit(1)
                     }
                 }
-                .font(.caption)
+                .font(.system(.caption, design: .monospaced))
+                .minimumScaleFactor(0.8)
             }
         } else {
             Text("Token Maxx: sign in")
-                .font(.caption)
+                .font(.system(.caption, design: .monospaced))
         }
     }
 }
@@ -305,15 +337,18 @@ private struct InlineAccessoryView: View {
     let entry: UsageEntry
 
     var body: some View {
-        if let item = entry.focus {
-            if let resetsAt = item.window.resetsAt {
-                Text("\(item.kind.displayName) \(Fmt.percent(item.window.usedPercent)) · \(Fmt.compactCountdown(to: resetsAt, now: entry.date))")
+        Group {
+            if let item = entry.focus {
+                if let resetsAt = item.window.resetsAt {
+                    Text("\(item.kind.displayName) \(Fmt.percent(item.window.usedPercent)) · \(Fmt.compactCountdown(to: resetsAt, now: entry.date))")
+                } else {
+                    Text("\(item.kind.displayName) \(Fmt.percent(item.window.usedPercent))")
+                }
             } else {
-                Text("\(item.kind.displayName) \(Fmt.percent(item.window.usedPercent))")
+                Text("Token Maxx")
             }
-        } else {
-            Text("Token Maxx")
         }
+        .fontDesign(.monospaced)
     }
 }
 
@@ -324,6 +359,12 @@ private struct InlineAccessoryView: View {
 }
 
 #Preview(as: .systemMedium) {
+    UsageLimitsWidget()
+} timeline: {
+    UsageEntry.sample(configuration: UsageConfigurationIntent())
+}
+
+#Preview(as: .systemLarge) {
     UsageLimitsWidget()
 } timeline: {
     UsageEntry.sample(configuration: UsageConfigurationIntent())

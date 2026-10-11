@@ -13,8 +13,12 @@ struct UseItBannerStack: View {
                 .prefix(ResetAlertConfig.standard.maxVisibleAlerts)
 
             if !nudges.isEmpty {
-                VStack(spacing: 10) {
-                    ForEach(Array(nudges)) { nudge in
+                TerminalBox(title: "[ use it or lose it ]") {
+                    ForEach(Array(nudges.enumerated()), id: \.element.id) { index, nudge in
+                        if index > 0 {
+                            DashedDivider(color: TMX.orange.opacity(0.3))
+                                .padding(.vertical, 8)
+                        }
                         UseItBanner(nudge: nudge, now: context.date) {
                             onSelect(nudge.kind)
                         } onDismiss: {
@@ -23,6 +27,7 @@ struct UseItBannerStack: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
+                .transition(.opacity)
             }
         }
     }
@@ -34,20 +39,16 @@ private struct UseItBanner: View {
     let onSelect: () -> Void
     let onDismiss: () -> Void
 
-    private let tint = Color.orange
-
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 10) {
             Button(action: onSelect) {
-                HStack(alignment: .center, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "hourglass.bottomhalf.filled")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(tint)
-                        .frame(width: 34, height: 34)
-                        .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(TMX.amber)
                     Text(nudge.message(now: now))
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .font(TMX.font(.subheadline))
+                        .foregroundStyle(TMX.hi)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -58,25 +59,14 @@ private struct UseItBanner: View {
             .accessibilityHint("Shows \(nudge.kind.displayName)")
 
             Button(action: onDismiss) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(TMX.dim)
+                    .frame(width: 28, height: 28)
+                    .overlay(Rectangle().strokeBorder(TMX.faint, lineWidth: 1))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss until reset")
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.thinMaterial)
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(tint.opacity(0.10))
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(tint.opacity(0.35), lineWidth: 1)
-        )
     }
 }

@@ -8,14 +8,14 @@ struct ServiceCard: View {
         let snapshot = model.snapshots[kind]
         let signedIn = model.isSignedIn(kind)
 
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             header(snapshot: snapshot, signedIn: signedIn)
 
             if !signedIn {
                 signedOutContent
             } else if let snapshot, !snapshot.windows.isEmpty {
                 ForEach(snapshot.windows) { window in
-                    UsageWindowRow(window: window)
+                    UsageWindowRow(window: window, kind: kind)
                 }
                 if !snapshot.extras.isEmpty {
                     extrasView(snapshot.extras)
@@ -30,46 +30,49 @@ struct ServiceCard: View {
                 errorRow(error)
             }
         }
-        .padding(16)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(kind.brandColor.opacity(0.25), lineWidth: 1)
-        )
+        .overlay(alignment: .bottom) {
+            DashedDivider()
+        }
     }
 
     // MARK: - Pieces
 
     private func header(snapshot: ServiceSnapshot?, signedIn: Bool) -> some View {
-        HStack(spacing: 12) {
-            ServiceIcon(kind: kind, size: 34)
+        HStack(alignment: .center, spacing: 10) {
+            ServiceIcon(kind: kind, size: 20)
             VStack(alignment: .leading, spacing: 2) {
-                Text(kind.displayName)
-                    .font(.headline)
+                Text(kind.displayName.uppercased())
+                    .font(TMX.font(.headline, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(TMX.hi)
                 if signedIn, let snapshot {
                     TimelineView(.everyMinute) { context in
-                        Text("Updated \(Fmt.relative(snapshot.fetchedAt, now: context.date))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("updated \(Fmt.relative(snapshot.fetchedAt, now: context.date))")
+                            .font(TMX.font(.caption))
+                            .foregroundStyle(TMX.dim)
                     }
                 } else if !signedIn {
-                    Text("Not signed in")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text("not signed in")
+                        .font(TMX.font(.caption))
+                        .foregroundStyle(TMX.dim)
                 }
             }
             Spacer()
             if model.isRefreshing(kind) {
                 ProgressView()
                     .controlSize(.small)
+                    .tint(TMX.orange)
             }
             Button {
                 model.sheetKind = kind
             } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-                    .foregroundStyle(kind.brandColor)
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(TMX.orange)
+                    .frame(width: 32, height: 28)
+                    .overlay(Rectangle().strokeBorder(TMX.faint, lineWidth: 1))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(kind.displayName) settings")
@@ -77,16 +80,23 @@ struct ServiceCard: View {
     }
 
     private var signedOutContent: some View {
-        HStack {
+        HStack(alignment: .center, spacing: 12) {
             Text(signInBlurb)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(TMX.font(.caption))
+                .foregroundStyle(TMX.dim)
             Spacer()
-            Button("Sign In") {
+            Button {
                 model.sheetKind = kind
+            } label: {
+                Text("[ sign in ]")
+                    .font(TMX.font(.subheadline, weight: .bold))
+                    .foregroundStyle(TMX.bg)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(TMX.orange)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(kind.brandColor)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Sign In")
         }
     }
 
@@ -101,9 +111,10 @@ struct ServiceCard: View {
     private var loadingContent: some View {
         HStack(spacing: 10) {
             ProgressView()
-            Text("Fetching usage…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .tint(TMX.orange)
+            Text("fetching usage…")
+                .font(TMX.font(.subheadline))
+                .foregroundStyle(TMX.dim)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .redacted(reason: .placeholder)
@@ -112,12 +123,16 @@ struct ServiceCard: View {
     private func extrasView(_ extras: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(extras, id: \.self) { line in
-                Label(line, systemImage: "info.circle")
-                    .labelStyle(ExtraLabelStyle())
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("+")
+                        .foregroundStyle(TMX.orange)
+                        .accessibilityHidden(true)
+                    Text(line)
+                        .foregroundStyle(TMX.fg)
+                }
             }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        .font(TMX.font(.caption))
     }
 
     private func errorRow(_ message: String) -> some View {
@@ -126,66 +141,65 @@ struct ServiceCard: View {
             Text(message)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            Button("Retry") {
+            Button {
                 Task { await model.refresh(kind.credentialGroup) }
+            } label: {
+                Text("[ retry ]")
+                    .font(TMX.font(.caption, weight: .bold))
+                    .foregroundStyle(TMX.orange)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(.plain)
             .disabled(model.isRefreshing(kind))
+            .accessibilityLabel("Retry")
         }
-        .font(.caption)
-        .foregroundStyle(.red)
-    }
-}
-
-private struct ExtraLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            configuration.icon
-                .imageScale(.small)
-            configuration.title
-        }
+        .font(TMX.font(.caption))
+        .foregroundStyle(TMX.red)
     }
 }
 
 struct UsageWindowRow: View {
     let window: UsageWindow
+    let kind: ServiceKind
 
     var body: some View {
         TimelineView(.everyMinute) { context in
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(window.label)
-                        .font(.subheadline.weight(.medium))
+                    Text(window.label.lowercased())
+                        .font(TMX.font(.subheadline))
+                        .foregroundStyle(TMX.fg)
                     Spacer()
                     Text(Fmt.percent(window.usedPercent))
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .font(TMX.font(.subheadline, weight: .bold))
+                        .monospacedDigit()
                         .foregroundStyle(UsageColor.color(for: window.usedPercent))
                 }
 
-                UsageBar(usedPercent: window.usedPercent, height: 8)
+                UsageBar(usedPercent: window.usedPercent, height: 10)
 
-                HStack(alignment: .firstTextBaseline) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("\(Fmt.percent(window.remainingPercent)) left")
+                        .foregroundStyle(TMX.hi)
                     Spacer()
                     if let resetsAt = window.resetsAt {
                         Text(Fmt.resetsIn(resetsAt, now: context.date))
                             .monospacedDigit()
-                            .fontDesign(.monospaced)
+                            .foregroundStyle(TMX.resetColor(window, kind: kind, now: context.date))
                         Text("· \(Fmt.absolute(resetsAt))")
+                            .foregroundStyle(TMX.dim)
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(TMX.font(.caption))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
 
                 if let detail = window.detail {
                     Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(TMX.font(.caption2))
+                        .foregroundStyle(TMX.dim)
                 }
             }
+            .padding(.leading, 30)
         }
         .accessibilityElement(children: .combine)
     }

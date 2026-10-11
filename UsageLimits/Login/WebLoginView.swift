@@ -61,18 +61,28 @@ struct WebLoginScreen: View {
             .ignoresSafeArea(edges: .bottom)
             .safeAreaInset(edge: .top) {
                 Text(flow.hint)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(TMX.font(.footnote))
+                    .foregroundStyle(TMX.dim)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
                     .padding(.vertical, 8)
-                    .background(.bar)
+                    .background(TMX.panel)
+                    .overlay(alignment: .bottom) { TerminalDivider() }
             }
+            .background(TMX.bg.ignoresSafeArea())
             .navigationTitle(flow.title)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(TMX.bg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .font(TMX.font(.body))
+                            .foregroundStyle(TMX.orange)
+                    }
                 }
             }
         }

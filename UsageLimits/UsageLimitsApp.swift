@@ -8,6 +8,8 @@ struct UsageLimitsApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(model)
+                .preferredColorScheme(.dark)
+                .tint(TMX.orange)
         }
     }
 }

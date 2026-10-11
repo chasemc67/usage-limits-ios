@@ -41,6 +41,7 @@ struct ServiceSettingsSheet: View {
                             model.signOut(kind)
                             status = StatusMessage(text: "Signed out", isError: false)
                         }
+                        .foregroundStyle(TMX.red)
                     } footer: {
                         if kind.credentialGroup.count > 1 {
                             Text("Signs out of both Cursor and Grok Bot, and clears saved web cookies.")
@@ -48,27 +49,43 @@ struct ServiceSettingsSheet: View {
                             Text("Removes the stored credentials from the Keychain and clears saved web cookies.")
                         }
                     }
+                    .terminalSection()
                 }
             }
-            .navigationTitle(kind.displayName)
+            .fontDesign(.monospaced)
+            .scrollContentBackground(.hidden)
+            .background(TerminalBackground().ignoresSafeArea())
+            .navigationTitle(kind.displayName.lowercased())
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(TMX.bg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Done")
+                            .font(TMX.font(.body, weight: .bold))
+                            .foregroundStyle(TMX.orange)
+                    }
                 }
             }
             .disabled(busy)
             .overlay {
                 if busy {
                     ProgressView()
+                        .tint(TMX.orange)
                         .padding(20)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                        .background(TMX.panel)
+                        .overlay(Rectangle().strokeBorder(TMX.orange, lineWidth: 1))
                 }
             }
             .fullScreenCover(item: $webLoginFlow) { flow in
                 WebLoginScreen(flow: flow) { result in
                     handle(result)
                 }
+                .preferredColorScheme(.dark)
+                .tint(TMX.orange)
             }
         }
     }
@@ -78,25 +95,29 @@ struct ServiceSettingsSheet: View {
     private var statusSection: some View {
         Section {
             HStack(spacing: 12) {
-                ServiceIcon(kind: kind, size: 40)
+                ServiceIcon(kind: kind, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(kind.displayName).font(.headline)
-                    Label(signedIn ? "Signed in" : "Not signed in",
+                    Text(kind.displayName.uppercased())
+                        .font(TMX.font(.headline, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundStyle(TMX.hi)
+                    Label(signedIn ? "signed in" : "not signed in",
                           systemImage: signedIn ? "checkmark.seal.fill" : "xmark.seal")
-                        .font(.subheadline)
-                        .foregroundStyle(signedIn ? .green : .secondary)
+                        .font(TMX.font(.subheadline))
+                        .foregroundStyle(signedIn ? TMX.green : TMX.dim)
                 }
             }
             if let status {
                 Text(status.text)
-                    .font(.footnote)
-                    .foregroundStyle(status.isError ? .red : .green)
+                    .font(TMX.font(.footnote))
+                    .foregroundStyle(status.isError ? TMX.red : TMX.green)
             }
         } footer: {
             if kind.credentialGroup.count > 1 {
                 Text("Cursor and Grok Bot share one Cursor login.")
             }
         }
+        .terminalSection()
     }
 
     @ViewBuilder
@@ -141,6 +162,7 @@ struct ServiceSettingsSheet: View {
                 Text("OAuth with PKCE. If automatic capture doesn't work, use the system browser: copy the code shown after approving, tap Cancel, and paste it below.")
             }
         }
+        .terminalSection()
     }
 
     private var claudePasteCodeSection: some View {
@@ -148,7 +170,7 @@ struct ServiceSettingsSheet: View {
             TextField("code#state", text: $claudePastedCode, axis: .vertical)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.footnote.monospaced())
+                .font(TMX.font(.footnote))
             HStack {
                 PasteButton(payloadType: String.self) { strings in
                     if let first = strings.first {
@@ -162,7 +184,8 @@ struct ServiceSettingsSheet: View {
                     exchangeClaudeCode()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(kind.brandColor)
+                .tint(TMX.orange)
+                .foregroundStyle(TMX.bg)
                 .disabled(claudePKCE == nil || claudePastedCode.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         } header: {
@@ -174,6 +197,7 @@ struct ServiceSettingsSheet: View {
                 Text("Paste the code shown on the Anthropic callback page (format code#state).")
             }
         }
+        .terminalSection()
     }
 
     @ViewBuilder
@@ -224,6 +248,7 @@ struct ServiceSettingsSheet: View {
                 Text("An OAuth access token (sk-ant-oat…). With a refresh token the app renews it automatically.")
             }
         }
+        .terminalSection()
     }
 
     // MARK: - Actions
@@ -357,6 +382,16 @@ struct ServiceSettingsSheet: View {
     private func signedInSuccessfully() {
         status = StatusMessage(text: "Signed in — refreshing…", isError: false)
         model.didSignIn(kind)
+    }
+}
+
+private extension View {
+    /// Flat dark rows with hairline separators.
+    func terminalSection() -> some View {
+        self
+            .listRowBackground(TMX.panel)
+            .listRowSeparatorTint(TMX.faint)
+            .listSectionSeparatorTint(TMX.faint)
     }
 }
 

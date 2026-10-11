@@ -52,8 +52,8 @@ enum Fmt {
 
 enum UsageColor {
     static func color(for usedPercent: Double) -> Color {
-        if usedPercent < 60 { return .green }
-        if usedPercent < 85 { return .yellow }
-        return .red
+        if usedPercent < 60 { return TMX.orange }
+        if usedPercent < 85 { return TMX.amber }
+        return TMX.red
     }
 }
