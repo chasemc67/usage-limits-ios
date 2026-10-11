@@ -17,7 +17,42 @@ final class AppModel: ObservableObject {
         snapshots = SnapshotStore.loadAll()
         dismissedNudges = NudgeDismissals.load()
         reloadAuthState()
+        #if DEBUG
+        if Self.demoMode { seedDemo() }
+        #endif
     }
+
+    #if DEBUG
+    /// Debug-only screenshot mode: launch with `-TMXDemo` to show sample data without signing in.
+    static var demoMode: Bool { ProcessInfo.processInfo.arguments.contains("-TMXDemo") }
+
+    private func seedDemo() {
+        let now = Date()
+        let d: Double = 86_400
+        let s: [ServiceKind: ServiceSnapshot] = [
+            .grokBot: ServiceSnapshot(kind: .grokBot, windows: [
+                UsageWindow(label: "Weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
+                extras: ["Plan: Ultra", "Cursor plan: ultra", "On-demand: enabled"], fetchedAt: now, error: nil),
+            .codex: ServiceSnapshot(kind: .codex, windows: [
+                UsageWindow(label: "Weekly", usedPercent: 0, resetsAt: now.addingTimeInterval(7*d), windowSeconds: 604_800)],
+                extras: ["Plan: Plus", "Credits: 100", "Reset credits available: 2"], fetchedAt: now, error: nil),
+            .claude: ServiceSnapshot(kind: .claude, windows: [
+                UsageWindow(label: "5-hour", usedPercent: 25, resetsAt: now.addingTimeInterval(42*60), windowSeconds: 18_000),
+                UsageWindow(label: "Weekly (all models)", usedPercent: 24, resetsAt: now.addingTimeInterval(3*d + 19*3600), windowSeconds: 604_800)],
+                extras: ["Extra usage: off"], fetchedAt: now, error: nil),
+            .cursor: ServiceSnapshot(kind: .cursor, windows: [
+                UsageWindow(label: "Cursor Models", usedPercent: 38, resetsAt: now.addingTimeInterval(31*d)),
+                UsageWindow(label: "Other Models", usedPercent: 12, resetsAt: now.addingTimeInterval(31*d)),
+                UsageWindow(label: "Total included", usedPercent: 27, resetsAt: now.addingTimeInterval(31*d))],
+                extras: ["Plan: Ultra", "On-demand: $0.00 spent"], fetchedAt: now, error: nil),
+        ]
+        SnapshotStore.saveAll(s)
+        snapshots = s
+        var st: [ServiceKind: Bool] = [:]
+        for k in ServiceKind.allCases { st[k] = true }
+        signedIn = st
+    }
+    #endif
 
     var lastUpdated: Date? {
         snapshots.values.map(\.fetchedAt).max()
@@ -49,6 +84,9 @@ final class AppModel: ObservableObject {
     }
 
     func refresh(_ kinds: [ServiceKind]) async {
+        #if DEBUG
+        if Self.demoMode { return }
+        #endif
         reloadAuthState()
         let targets = kinds.filter { isSignedIn($0) && !refreshing.contains($0) }
         guard !targets.isEmpty else { return }
