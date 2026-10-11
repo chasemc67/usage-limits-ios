@@ -5,6 +5,8 @@ struct UsageEntry: TimelineEntry {
     let date: Date
     let snapshots: [ServiceKind: ServiceSnapshot]
     let configuration: UsageConfigurationIntent
+    /// Use-it-or-lose-it nudges the user dismissed in the app (`UseItNudge.dismissalKey`).
+    var dismissedNudges: Set<String> = []
 }
 
 struct UsageProvider: AppIntentTimelineProvider {
@@ -17,7 +19,8 @@ struct UsageProvider: AppIntentTimelineProvider {
         if context.isPreview && cached.values.allSatisfy({ $0.windows.isEmpty }) {
             return UsageEntry.sample(configuration: configuration)
         }
-        return UsageEntry(date: Date(), snapshots: cached, configuration: configuration)
+        return UsageEntry(date: Date(), snapshots: cached, configuration: configuration,
+                          dismissedNudges: Set(NudgeDismissals.load().keys))
     }
 
     func timeline(for configuration: UsageConfigurationIntent, in context: Context) async -> Timeline<UsageEntry> {
@@ -29,11 +32,13 @@ struct UsageProvider: AppIntentTimelineProvider {
         }
 
         let now = Date()
+        let dismissed = Set(NudgeDismissals.load(now: now).keys)
         // Several entries with the same data so countdown text stays fresh between reloads.
         let entries = stride(from: 0, to: 20, by: 5).map { minutes in
             UsageEntry(date: now.addingTimeInterval(TimeInterval(minutes * 60)),
                        snapshots: snapshots,
-                       configuration: configuration)
+                       configuration: configuration,
+                       dismissedNudges: dismissed)
         }
         return Timeline(entries: entries, policy: .after(now.addingTimeInterval(20 * 60)))
     }
@@ -86,14 +91,28 @@ extension UsageEntry {
         }
     }
 
-    /// Up to `limit` windows for the medium family: the chosen service's windows,
-    /// or the most constrained windows across all services.
-    func topItems(limit: Int) -> [FocusItem] {
-        let items = candidates
-        if configuration.service.kind != nil {
-            return Array(items.prefix(limit))
+    /// A provider's snapshot, if it has data.
+    func snapshot(for kind: ServiceKind) -> ServiceSnapshot? {
+        guard let snapshot = snapshots[kind], !snapshot.windows.isEmpty else { return nil }
+        return snapshot
+    }
+
+    /// The single highest-used pool across every provider (tagged MAX), if any usage is reported.
+    var maxItemID: String? {
+        let items = available.flatMap { snapshot in
+            snapshot.windows.map { FocusItem(snapshot: snapshot, window: $0) }
         }
-        return Array(items.sorted { $0.window.usedPercent > $1.window.usedPercent }.prefix(limit))
+        // `max(by:)` keeps the first of equal maxima, so ties go to the first in canonical order.
+        guard let top = items.max(by: { $0.window.usedPercent < $1.window.usedPercent }),
+              top.window.usedPercent > 0 else { return nil }
+        return top.id
+    }
+
+    /// Use-it-or-lose-it nudges for providers with data, soonest reset first, minus ones dismissed in the app.
+    var nudges: [UseItNudge] {
+        UseItNudge
+            .nudges(snapshots: snapshots, isSignedIn: { snapshot(for: $0) != nil }, now: date)
+            .filter { !dismissedNudges.contains($0.dismissalKey) }
     }
 
     var lastUpdated: Date? {
@@ -102,21 +121,23 @@ extension UsageEntry {
 
     static func sample(configuration: UsageConfigurationIntent) -> UsageEntry {
         let now = Date()
+        let day: TimeInterval = 86_400
         let snapshots: [ServiceKind: ServiceSnapshot] = [
             .cursor: ServiceSnapshot(kind: .cursor, windows: [
-                UsageWindow(label: "Cursor Models (Auto)", usedPercent: 34, resetsAt: now.addingTimeInterval(9 * 86_400)),
-                UsageWindow(label: "Other Models (API)", usedPercent: 62, resetsAt: now.addingTimeInterval(9 * 86_400)),
+                UsageWindow(id: "cursor.auto", label: "Cursor Models (Auto)", usedPercent: 1, resetsAt: now.addingTimeInterval(30 * day)),
+                UsageWindow(id: "cursor.api", label: "Other Models (API)", usedPercent: 39, resetsAt: now.addingTimeInterval(30 * day)),
+                UsageWindow(id: "cursor.total", label: "Total included", usedPercent: 4, resetsAt: now.addingTimeInterval(30 * day)),
             ], extras: [], fetchedAt: now, error: nil),
             .grokBot: ServiceSnapshot(kind: .grokBot, windows: [
-                UsageWindow(label: "Weekly", usedPercent: 18, resetsAt: now.addingTimeInterval(3 * 86_400), windowSeconds: 604_800),
+                UsageWindow(id: "grok.weekly", label: "Weekly", usedPercent: 21, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800),
             ], extras: [], fetchedAt: now, error: nil),
             .codex: ServiceSnapshot(kind: .codex, windows: [
-                UsageWindow(label: "5-hour", usedPercent: 47, resetsAt: now.addingTimeInterval(2 * 3600 + 840), windowSeconds: 18_000),
-                UsageWindow(label: "Weekly", usedPercent: 88, resetsAt: now.addingTimeInterval(2 * 86_400), windowSeconds: 604_800),
+                UsageWindow(id: "codex.secondary_window", label: "Weekly", usedPercent: 26, resetsAt: now.addingTimeInterval(6 * day), windowSeconds: 604_800),
             ], extras: [], fetchedAt: now, error: nil),
             .claude: ServiceSnapshot(kind: .claude, windows: [
-                UsageWindow(label: "5-hour", usedPercent: 23, resetsAt: now.addingTimeInterval(3 * 3600), windowSeconds: 18_000),
-                UsageWindow(label: "Weekly (all models)", usedPercent: 56, resetsAt: now.addingTimeInterval(4 * 86_400), windowSeconds: 604_800),
+                // Inside the 1h five-hour lead time with 63% left, so the large widget shows its banner.
+                UsageWindow(id: "claude.five_hour", label: "5-hour", usedPercent: 37, resetsAt: now.addingTimeInterval(58 * 60), windowSeconds: 18_000),
+                UsageWindow(id: "claude.seven_day", label: "Weekly (all models)", usedPercent: 25, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800),
             ], extras: [], fetchedAt: now, error: nil),
         ]
         return UsageEntry(date: now, snapshots: snapshots, configuration: configuration)
