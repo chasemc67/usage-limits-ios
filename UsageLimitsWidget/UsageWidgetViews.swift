@@ -204,7 +204,7 @@ private struct SmallWidgetView: View {
     let entry: UsageEntry
 
     var body: some View {
-        let kind = entry.configuration.provider.kind
+        let kind = entry.provider.kind
         if let snapshot = entry.snapshot(for: kind) {
             let maxID = entry.maxItemID
             VStack(alignment: .leading, spacing: 0) {
@@ -479,8 +479,9 @@ private struct MediumCell: View {
                 }
             } else {
                 ViewThatFits(in: .horizontal) {
-                    oneLineRows(windows, maxWindow: maxWindow, short: false)
-                    oneLineRows(windows, maxWindow: maxWindow, short: true)
+                    oneLineRows(windows, maxWindow: maxWindow, short: false, scales: false)
+                    oneLineRows(windows, maxWindow: maxWindow, short: true, scales: false)
+                    oneLineRows(windows, maxWindow: maxWindow, short: true, scales: true)
                 }
             }
             Spacer(minLength: 0)
@@ -494,58 +495,73 @@ private struct MediumCell: View {
 
     @ViewBuilder
     private func header(windows: [UsageWindow], maxWindow: UsageWindow?) -> some View {
+        // Narrow single-pool cells carry their reset under the number, so the header is just the name.
+        let count: String? = switch windows.count {
+        case 0: nil
+        case 1: wide ? "1 pool" : nil
+        default: "\(windows.count) pools"
+        }
+        ViewThatFits(in: .horizontal) {
+            headerLine(count: count)
+            headerLine(count: nil)
+        }
+        .frame(height: 13)
+    }
+
+    private func headerLine(count: String?) -> some View {
         HStack(spacing: 5) {
             ProviderLogo(kind: kind, size: 12)
                 .widgetAccentable()
             Text(kind.displayName.lowercased())
                 .font(TMX.font(size: 9.5, weight: .bold))
                 .foregroundStyle(TMX.hi)
+                .minimumScaleFactor(0.7)
             Spacer(minLength: 4)
-            if wide, let maxWindow {
-                MaxTag()
-                Text(maxWindow.shortLabel)
-                    .font(TMX.font(size: 9))
-                    .foregroundStyle(TMX.orange)
-            } else if windows.count == 1, !wide, let resetsAt = windows[0].resetsAt {
-                (Text("resets ").font(TMX.font(size: 9)).foregroundStyle(TMX.dim)
-                 + Text(Fmt.compactCountdown(to: resetsAt, now: entry.date))
-                    .font(TMX.font(size: 9.5, weight: .bold))
-                    .foregroundStyle(TMX.resetIsSoon(windows[0], kind: kind, now: entry.date) ? TMX.amber : TMX.fg))
-            } else if !windows.isEmpty {
-                Text(windows.count == 1 ? "1 pool" : "\(windows.count) pools")
+            if let count {
+                Text(count)
                     .font(TMX.font(size: 9))
                     .foregroundStyle(TMX.dim)
+                    .fixedSize()
             }
         }
         .lineLimit(1)
-        .frame(height: 13)
     }
 
-    /// Narrow single-pool cell: big number, label, full-width bar.
+    /// Narrow single-pool cell: big number beside label and reset, full-width bar.
     private func bigNumber(_ window: UsageWindow, isMax: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .bottom, spacing: 5) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .center, spacing: 5) {
                 Text(Fmt.percent(window.usedPercent))
-                    .font(TMX.font(size: 28, weight: .bold))
+                    .font(TMX.font(size: 22, weight: .bold))
                     .tracking(-1)
                     .foregroundStyle(UsageColor.color(for: window.usedPercent))
                     .widgetAccentable()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("used")
-                        .foregroundStyle(TMX.dim)
-                    Text(window.label.lowercased())
-                        .foregroundStyle(TMX.fg)
+                    .layoutPriority(1)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 3) {
+                        if isMax {
+                            MaxTag(size: 8)
+                        }
+                        Text(window.label.lowercased())
+                            .foregroundStyle(TMX.fg)
+                            .minimumScaleFactor(0.6)
+                    }
+                    if let resetsAt = window.resetsAt {
+                        (Text("resets ").foregroundStyle(TMX.dim)
+                         + Text(Fmt.compactCountdown(to: resetsAt, now: entry.date))
+                            .fontWeight(.bold)
+                            .foregroundStyle(TMX.resetIsSoon(window, kind: kind, now: entry.date) ? TMX.amber : TMX.fg))
+                            .minimumScaleFactor(0.6)
+                    } else {
+                        Text("used")
+                            .foregroundStyle(TMX.dim)
+                    }
                 }
                 .font(TMX.font(size: 9))
                 .lineLimit(1)
-                .padding(.bottom, 3)
                 Spacer(minLength: 0)
-                if isMax {
-                    MaxTag()
-                        .padding(.bottom, 4)
-                }
             }
             PartialSegmentBar(usedPercent: window.usedPercent, segments: 20, height: 6)
         }
@@ -554,19 +570,11 @@ private struct MediumCell: View {
     /// "label · reset" over "bar · %".
     private func twoLinePool(_ window: UsageWindow, isMax: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 4) {
-                Text(window.label.lowercased())
-                    .foregroundStyle(isMax ? TMX.orange : TMX.fg)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Spacer(minLength: 4)
-                if let resetsAt = window.resetsAt {
-                    Text(Fmt.compactCountdown(to: resetsAt, now: entry.date))
-                        .foregroundStyle(TMX.resetColor(window, kind: kind, now: entry.date))
-                        .lineLimit(1)
-                }
+            ViewThatFits(in: .horizontal) {
+                twoLinePoolLabel(window, label: window.label.lowercased(), isMax: isMax, scales: false)
+                twoLinePoolLabel(window, label: window.shortLabel, isMax: isMax, scales: false)
+                twoLinePoolLabel(window, label: window.shortLabel, isMax: isMax, scales: true)
             }
-            .font(TMX.font(size: 9))
             HStack(spacing: 5) {
                 PartialSegmentBar(usedPercent: window.usedPercent, segments: wide ? 24 : 14, height: 6)
                 Text(Fmt.percent(window.usedPercent))
@@ -580,33 +588,64 @@ private struct MediumCell: View {
         .padding(.top, 2)
     }
 
+    private func twoLinePoolLabel(_ window: UsageWindow, label: String, isMax: Bool, scales: Bool) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .foregroundStyle(isMax ? TMX.orange : TMX.fg)
+                .minimumScaleFactor(scales ? 0.6 : 1)
+                .fixedSize(horizontal: !scales, vertical: false)
+            if isMax {
+                MaxTag(size: 8)
+            }
+            Spacer(minLength: 4)
+            if let resetsAt = window.resetsAt {
+                Text(Fmt.compactCountdown(to: resetsAt, now: entry.date))
+                    .foregroundStyle(TMX.resetColor(window, kind: kind, now: entry.date))
+                    .fixedSize()
+            }
+        }
+        .font(TMX.font(size: 9))
+        .lineLimit(1)
+    }
+
     /// One row per pool: label · bar · % · reset (narrow cells drop the bar).
-    private func oneLineRows(_ windows: [UsageWindow], maxWindow: UsageWindow?, short: Bool) -> some View {
+    /// `scales` is the last resort: labels shrink instead of overflowing.
+    private func oneLineRows(_ windows: [UsageWindow], maxWindow: UsageWindow?, short: Bool, scales: Bool) -> some View {
         let labels = windows.map { short ? $0.shortLabel : $0.label.lowercased() }
-        let labelWidth = monoWidth(labels.map(\.count).max() ?? 0, size: 9)
+        let tagWidth: CGFloat = 26
+        let labelWidth = scales ? 0 : zip(windows, labels).map { window, label in
+            monoWidth(label.count, size: 9) + (window.id == maxWindow?.id ? tagWidth : 0)
+        }.max() ?? 0
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(windows.enumerated()), id: \.element.id) { index, window in
                 let isMax = window.id == maxWindow?.id
-                HStack(spacing: 4) {
-                    Text(labels[index])
-                        .foregroundStyle(isMax ? TMX.orange : TMX.fg)
-                        .fixedSize()
-                        .frame(minWidth: labelWidth, alignment: .leading)
+                HStack(spacing: 3) {
+                    HStack(spacing: 3) {
+                        Text(labels[index])
+                            .foregroundStyle(isMax ? TMX.orange : TMX.fg)
+                            .minimumScaleFactor(scales ? 0.6 : 1)
+                            .fixedSize(horizontal: !scales, vertical: false)
+                        if isMax {
+                            MaxTag(size: 8)
+                        }
+                    }
+                    .frame(minWidth: labelWidth, alignment: .leading)
+                    .layoutPriority(scales ? 1 : 0)
                     if wide {
                         PartialSegmentBar(usedPercent: window.usedPercent, segments: 16, height: 6)
-                            .frame(minWidth: 24, idealWidth: 40, maxWidth: .infinity)
+                            .frame(minWidth: scales ? 0 : 16, idealWidth: 40, maxWidth: .infinity)
                     } else {
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 3)
                     }
                     Text(Fmt.percent(window.usedPercent))
                         .fontWeight(.bold)
                         .foregroundStyle(isMax ? TMX.orange : TMX.hi)
                         .fixedSize()
-                        .frame(minWidth: 22, alignment: .trailing)
+                        .frame(minWidth: 18, alignment: .trailing)
                     Text(window.resetsAt.map { Fmt.compactCountdown(to: $0, now: entry.date) } ?? "")
                         .foregroundStyle(TMX.resetColor(window, kind: kind, now: entry.date))
                         .fixedSize()
-                        .frame(minWidth: 18, alignment: .trailing)
+                        .frame(minWidth: 16, alignment: .trailing)
                 }
                 .font(TMX.font(size: 9))
                 .lineLimit(1)
@@ -635,12 +674,11 @@ private struct LargeWidgetView: View {
                     NudgeBanner(nudge: nudge, others: nudges.count - 1, now: entry.date)
                         .padding(.top, 14)
                 }
-                // Shed the legend, then row height, when many pools (or the banner) need the room.
+                // Shed row height when many pools (or the banner) need the room.
                 ViewThatFits(in: .vertical) {
-                    table(services, nudges: nudges, rowHeight: 19, legend: true)
-                    table(services, nudges: nudges, rowHeight: 19, legend: false)
-                    table(services, nudges: nudges, rowHeight: 16, legend: false)
-                    table(services, nudges: nudges, rowHeight: 14, legend: false)
+                    table(services, nudges: nudges, rowHeight: 19)
+                    table(services, nudges: nudges, rowHeight: 16)
+                    table(services, nudges: nudges, rowHeight: 14)
                 }
                 Spacer(minLength: 0)
             }
@@ -648,10 +686,10 @@ private struct LargeWidgetView: View {
     }
 
     private func table(_ services: [ServiceSnapshot], nudges: [UseItNudge],
-                       rowHeight: CGFloat, legend: Bool) -> some View {
+                       rowHeight: CGFloat) -> some View {
         LargeTable(entry: entry, services: services,
                    flagged: Set(nudges.map { "\($0.kind.rawValue).\($0.window.id)" }),
-                   rowHeight: rowHeight, showsLegend: legend)
+                   rowHeight: rowHeight)
     }
 }
 
@@ -677,12 +715,12 @@ private struct NudgeBanner: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-                (Text(others > 0 ? "+\(others) more · details in the " : "details in the ").foregroundStyle(TMX.dim)
-                 + Text("▌").foregroundStyle(TMX.amber)
-                 + Text(others > 0 ? " rows below" : " row below").foregroundStyle(TMX.dim))
-                    .font(TMX.font(size: 9.5))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                if others > 0 {
+                    Text("+\(others) more")
+                        .font(TMX.font(size: 9.5))
+                        .foregroundStyle(TMX.dim)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 4)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -726,7 +764,6 @@ private struct LargeTable: View {
     /// FocusItem ids of pools with a use-it-or-lose-it nudge.
     let flagged: Set<String>
     let rowHeight: CGFloat
-    let showsLegend: Bool
 
     private static let segments = 25
     private static let indent: CGFloat = 17
@@ -769,15 +806,6 @@ private struct LargeTable: View {
                         isMax: entry.isMax(window, of: snapshot.kind, maxID: maxID),
                         flagged: flagged.contains("\(snapshot.kind.rawValue).\(window.id)"))
                 }
-            }
-
-            if showsLegend {
-                Text(verbatim: "\(Self.segments) segments · 1 segment = \(100 / Self.segments)% used · partial fill in ⅛ steps")
-                    .font(TMX.font(size: 9))
-                    .foregroundStyle(TMX.dim)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .padding(.top, 7)
             }
         }
     }
@@ -936,22 +964,22 @@ private struct InlineAccessoryView: View {
 }
 
 #Preview(as: .systemSmall) {
-    UsageLimitsWidget()
+    UsageProviderWidget()
 } timeline: {
-    UsageEntry.sample(configuration: UsageConfigurationIntent(provider: .claude))
-    UsageEntry.sample(configuration: UsageConfigurationIntent(provider: .cursor))
-    UsageEntry.sample(configuration: UsageConfigurationIntent(provider: .grokBot))
-    UsageEntry.sample(configuration: UsageConfigurationIntent(provider: .codex))
+    UsageEntry.sample(provider: .claude)
+    UsageEntry.sample(provider: .cursor)
+    UsageEntry.sample(provider: .grokBot)
+    UsageEntry.sample(provider: .codex)
 }
 
 #Preview(as: .systemMedium) {
-    UsageLimitsWidget()
+    UsageOverviewWidget()
 } timeline: {
-    UsageEntry.sample(configuration: UsageConfigurationIntent())
+    UsageEntry.sample()
 }
 
 #Preview(as: .systemLarge) {
-    UsageLimitsWidget()
+    UsageOverviewWidget()
 } timeline: {
-    UsageEntry.sample(configuration: UsageConfigurationIntent())
+    UsageEntry.sample()
 }

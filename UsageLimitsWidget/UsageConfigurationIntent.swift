@@ -69,23 +69,14 @@ enum WindowChoice: String, AppEnum, CaseIterable {
     ]
 }
 
+/// Lock Screen widgets: pick a service and limit window.
 struct UsageConfigurationIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Usage Limit"
     static var description = IntentDescription("Choose which service and limit window to show.")
 
-    /// Small widgets pick one provider; the Lock Screen families pick a service and window.
-    /// Medium and large always show every provider.
     static var parameterSummary: some ParameterSummary {
-        When(widgetFamily: .equalTo, .systemSmall) {
-            Summary("Show \(\.$provider)")
-        } otherwise: {
-            Summary("Show \(\.$service) \(\.$window)")
-        }
+        Summary("Show \(\.$service) \(\.$window)")
     }
-
-    /// Used by the small Home Screen widget.
-    @Parameter(title: "Provider", default: .claude)
-    var provider: ProviderChoice
 
     @Parameter(title: "Service", default: .mostConstrained)
     var service: ServiceChoice
@@ -99,6 +90,21 @@ struct UsageConfigurationIntent: WidgetConfigurationIntent {
         self.service = service
         self.window = window
     }
+}
+
+/// Small Home Screen widget: pick one provider.
+struct ProviderConfigurationIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Provider"
+    static var description = IntentDescription("Choose which provider to show.")
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Show \(\.$provider)")
+    }
+
+    @Parameter(title: "Provider", default: .claude)
+    var provider: ProviderChoice
+
+    init() {}
 
     init(provider: ProviderChoice) {
         self.provider = provider

@@ -4,26 +4,30 @@ import WidgetKit
 struct UsageEntry: TimelineEntry {
     let date: Date
     let snapshots: [ServiceKind: ServiceSnapshot]
-    let configuration: UsageConfigurationIntent
+    /// Service/window selection (Lock Screen families).
+    var configuration = UsageConfigurationIntent()
+    /// Provider shown by the small Home Screen widget.
+    var provider: ProviderChoice = .claude
     /// Use-it-or-lose-it nudges the user dismissed in the app (`UseItNudge.dismissalKey`).
     var dismissedNudges: Set<String> = []
 }
 
-struct UsageProvider: AppIntentTimelineProvider {
-    func placeholder(in context: Context) -> UsageEntry {
-        UsageEntry.sample(configuration: UsageConfigurationIntent())
-    }
-
-    func snapshot(for configuration: UsageConfigurationIntent, in context: Context) async -> UsageEntry {
+/// Shared snapshot/timeline loading for every widget kind.
+private enum UsageLoader {
+    static func snapshot(isPreview: Bool, configure: (inout UsageEntry) -> Void) -> UsageEntry {
         let cached = SnapshotStore.loadAll()
-        if context.isPreview && cached.values.allSatisfy({ $0.windows.isEmpty }) {
-            return UsageEntry.sample(configuration: configuration)
+        var entry: UsageEntry
+        if isPreview && cached.values.allSatisfy({ $0.windows.isEmpty }) {
+            entry = UsageEntry.sample()
+        } else {
+            entry = UsageEntry(date: Date(), snapshots: cached,
+                               dismissedNudges: Set(NudgeDismissals.load().keys))
         }
-        return UsageEntry(date: Date(), snapshots: cached, configuration: configuration,
-                          dismissedNudges: Set(NudgeDismissals.load().keys))
+        configure(&entry)
+        return entry
     }
 
-    func timeline(for configuration: UsageConfigurationIntent, in context: Context) async -> Timeline<UsageEntry> {
+    static func timeline(configure: (inout UsageEntry) -> Void) async -> Timeline<UsageEntry> {
         let cached = SnapshotStore.loadAll()
         // Live fetch using the shared Keychain; fall back to the cache on timeout/failure
         // (fetchAll already keeps cached windows when a service errors).
@@ -35,12 +39,60 @@ struct UsageProvider: AppIntentTimelineProvider {
         let dismissed = Set(NudgeDismissals.load(now: now).keys)
         // Several entries with the same data so countdown text stays fresh between reloads.
         let entries = stride(from: 0, to: 20, by: 5).map { minutes in
-            UsageEntry(date: now.addingTimeInterval(TimeInterval(minutes * 60)),
-                       snapshots: snapshots,
-                       configuration: configuration,
-                       dismissedNudges: dismissed)
+            var entry = UsageEntry(date: now.addingTimeInterval(TimeInterval(minutes * 60)),
+                                   snapshots: snapshots,
+                                   dismissedNudges: dismissed)
+            configure(&entry)
+            return entry
         }
         return Timeline(entries: entries, policy: .after(now.addingTimeInterval(20 * 60)))
+    }
+}
+
+/// Lock Screen families (service + window).
+struct UsageProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> UsageEntry {
+        UsageEntry.sample()
+    }
+
+    func snapshot(for configuration: UsageConfigurationIntent, in context: Context) async -> UsageEntry {
+        UsageLoader.snapshot(isPreview: context.isPreview) { $0.configuration = configuration }
+    }
+
+    func timeline(for configuration: UsageConfigurationIntent, in context: Context) async -> Timeline<UsageEntry> {
+        await UsageLoader.timeline { $0.configuration = configuration }
+    }
+}
+
+/// Small Home Screen (one provider).
+struct ProviderUsageProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> UsageEntry {
+        UsageEntry.sample()
+    }
+
+    func snapshot(for configuration: ProviderConfigurationIntent, in context: Context) async -> UsageEntry {
+        UsageLoader.snapshot(isPreview: context.isPreview) { $0.provider = configuration.provider }
+    }
+
+    func timeline(for configuration: ProviderConfigurationIntent, in context: Context) async -> Timeline<UsageEntry> {
+        await UsageLoader.timeline { $0.provider = configuration.provider }
+    }
+}
+
+/// Medium and large Home Screen (every provider, no configuration).
+struct OverviewUsageProvider: TimelineProvider {
+    func placeholder(in context: Context) -> UsageEntry {
+        UsageEntry.sample()
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (UsageEntry) -> Void) {
+        completion(UsageLoader.snapshot(isPreview: context.isPreview) { _ in })
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<UsageEntry>) -> Void) {
+        Task {
+            completion(await UsageLoader.timeline { _ in })
+        }
     }
 }
 
@@ -119,7 +171,7 @@ extension UsageEntry {
         snapshots.values.map(\.fetchedAt).max()
     }
 
-    static func sample(configuration: UsageConfigurationIntent) -> UsageEntry {
+    static func sample(provider: ProviderChoice = .claude) -> UsageEntry {
         let now = Date()
         let day: TimeInterval = 86_400
         let snapshots: [ServiceKind: ServiceSnapshot] = [
@@ -140,6 +192,6 @@ extension UsageEntry {
                 UsageWindow(id: "claude.seven_day", label: "Weekly (all models)", usedPercent: 25, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800),
             ], extras: [], fetchedAt: now, error: nil),
         ]
-        return UsageEntry(date: now, snapshots: snapshots, configuration: configuration)
+        return UsageEntry(date: now, snapshots: snapshots, provider: provider)
     }
 }
