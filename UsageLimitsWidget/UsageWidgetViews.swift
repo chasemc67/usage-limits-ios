@@ -76,12 +76,6 @@ private extension UsageWindow {
     }
 }
 
-private extension UsageEntry {
-    func isMax(_ window: UsageWindow, of kind: ServiceKind, maxID: String?) -> Bool {
-        maxID == "\(kind.rawValue).\(window.id)"
-    }
-}
-
 /// Bar with a fixed number of segments. The last lit segment fills in ⅛ steps,
 /// so 1% shows a sliver and never looks the same as 4%.
 private struct PartialSegmentBar: View {
@@ -137,31 +131,6 @@ private struct SegmentShape: Shape {
     }
 }
 
-/// Orange "MAX" tag for the single highest-used pool.
-private struct MaxTag: View {
-    var size: CGFloat = 9
-
-    @Environment(\.widgetRenderingMode) private var renderingMode
-
-    var body: some View {
-        let label = Text("MAX")
-            .font(TMX.font(size: size, weight: .bold))
-            .tracking(0.6)
-        if renderingMode == .fullColor {
-            label
-                .foregroundStyle(Color(tmxHex: 0x140600))
-                .padding(.horizontal, 3)
-                .background(TMX.orange)
-        } else {
-            // Tinted/vibrant modes flatten colors, so dark-on-orange would vanish.
-            label
-                .padding(.horizontal, 3)
-                .overlay(Rectangle().strokeBorder(lineWidth: 1))
-                .widgetAccentable()
-        }
-    }
-}
-
 /// "❯ command" on the left, dim status on the right.
 private struct WidgetHeader: View {
     let command: String
@@ -206,23 +175,19 @@ private struct SmallWidgetView: View {
     var body: some View {
         let kind = entry.provider.kind
         if let snapshot = entry.snapshot(for: kind) {
-            let maxID = entry.maxItemID
             VStack(alignment: .leading, spacing: 0) {
                 header(snapshot)
                 switch snapshot.windows.count {
                 case 1:
-                    SmallSinglePool(window: snapshot.windows[0], kind: kind, now: entry.date,
-                                    isMax: entry.isMax(snapshot.windows[0], of: kind, maxID: maxID))
+                    SmallSinglePool(window: snapshot.windows[0], kind: kind, now: entry.date)
                 case 2:
                     ForEach(snapshot.windows) { window in
-                        SmallStackedPool(window: window, kind: kind, now: entry.date,
-                                         isMax: entry.isMax(window, of: kind, maxID: maxID))
+                        SmallStackedPool(window: window, kind: kind, now: entry.date)
                             .padding(.top, 7)
                     }
                 default:
                     ForEach(snapshot.windows) { window in
-                        SmallPoolRow(window: window, kind: kind, now: entry.date,
-                                     isMax: entry.isMax(window, of: kind, maxID: maxID))
+                        SmallPoolRow(window: window, kind: kind, now: entry.date)
                             .padding(.top, snapshot.windows.count > 3 ? 4 : 7)
                     }
                 }
@@ -270,7 +235,6 @@ private struct SmallSinglePool: View {
     let window: UsageWindow
     let kind: ServiceKind
     let now: Date
-    let isMax: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -296,9 +260,6 @@ private struct SmallSinglePool: View {
                     .foregroundStyle(TMX.fg)
                     .padding(.leading, 5)
                 Spacer(minLength: 0)
-                if isMax {
-                    MaxTag()
-                }
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)
@@ -325,7 +286,6 @@ private struct SmallStackedPool: View {
     let window: UsageWindow
     let kind: ServiceKind
     let now: Date
-    let isMax: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -335,9 +295,6 @@ private struct SmallStackedPool: View {
                     .foregroundStyle(TMX.fg)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                if isMax {
-                    MaxTag()
-                }
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 0) {
@@ -376,7 +333,6 @@ private struct SmallPoolRow: View {
     let window: UsageWindow
     let kind: ServiceKind
     let now: Date
-    let isMax: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -389,7 +345,7 @@ private struct SmallPoolRow: View {
                 Text(Fmt.percent(window.usedPercent))
                     .font(TMX.font(size: 12, weight: .bold))
                     .monospacedDigit()
-                    .foregroundStyle(isMax ? TMX.orange : TMX.hi)
+                    .foregroundStyle(TMX.hi)
                     .lineLimit(1)
                     .fixedSize()
                     .frame(minWidth: 30, alignment: .trailing)
@@ -402,9 +358,6 @@ private struct SmallPoolRow: View {
             Text(label)
                 .foregroundStyle(TMX.fg)
                 .fixedSize()
-            if isMax {
-                MaxTag()
-            }
             Spacer(minLength: 6)
             if let resetsAt = window.resetsAt {
                 Text(Fmt.compactCountdown(to: resetsAt, now: now))
@@ -426,7 +379,6 @@ private struct MediumWidgetView: View {
         if entry.available.isEmpty {
             EmptyWidgetView()
         } else {
-            let maxID = entry.maxItemID
             VStack(alignment: .leading, spacing: 6) {
                 WidgetHeader(command: "tmx grid · % used",
                              trailing: updatedText(entry.lastUpdated, now: entry.date))
@@ -436,13 +388,13 @@ private struct MediumWidgetView: View {
                     let wide = ((proxy.size.width - gap) * 195 / 327).rounded()
                     HStack(spacing: gap) {
                         VStack(spacing: gap) {
-                            MediumCell(entry: entry, kind: .claude, wide: true, maxID: maxID)
-                            MediumCell(entry: entry, kind: .cursor, wide: true, maxID: maxID)
+                            MediumCell(entry: entry, kind: .claude, wide: true)
+                            MediumCell(entry: entry, kind: .cursor, wide: true)
                         }
                         .frame(width: wide)
                         VStack(spacing: gap) {
-                            MediumCell(entry: entry, kind: .codex, wide: false, maxID: maxID)
-                            MediumCell(entry: entry, kind: .grokBot, wide: false, maxID: maxID)
+                            MediumCell(entry: entry, kind: .codex, wide: false)
+                            MediumCell(entry: entry, kind: .grokBot, wide: false)
                         }
                     }
                 }
@@ -455,15 +407,13 @@ private struct MediumCell: View {
     let entry: UsageEntry
     let kind: ServiceKind
     let wide: Bool
-    let maxID: String?
 
     var body: some View {
         let snapshot = entry.snapshot(for: kind)
         let windows = snapshot?.windows ?? []
-        let maxWindow = windows.first { entry.isMax($0, of: kind, maxID: maxID) }
 
         VStack(alignment: .leading, spacing: 0) {
-            header(windows: windows, maxWindow: maxWindow)
+            header(windows: windows)
 
             if windows.isEmpty {
                 Text((entry.snapshots[kind]?.error ?? "not signed in").lowercased())
@@ -472,16 +422,16 @@ private struct MediumCell: View {
                     .lineLimit(2)
                     .padding(.top, 3)
             } else if windows.count == 1 && !wide {
-                bigNumber(windows[0], isMax: maxWindow != nil)
+                bigNumber(windows[0])
             } else if windows.count <= 2 {
                 ForEach(windows) { window in
-                    twoLinePool(window, isMax: window.id == maxWindow?.id)
+                    twoLinePool(window)
                 }
             } else {
                 ViewThatFits(in: .horizontal) {
-                    oneLineRows(windows, maxWindow: maxWindow, short: false, scales: false)
-                    oneLineRows(windows, maxWindow: maxWindow, short: true, scales: false)
-                    oneLineRows(windows, maxWindow: maxWindow, short: true, scales: true)
+                    oneLineRows(windows, short: false, scales: false)
+                    oneLineRows(windows, short: true, scales: false)
+                    oneLineRows(windows, short: true, scales: true)
                 }
             }
             Spacer(minLength: 0)
@@ -494,7 +444,7 @@ private struct MediumCell: View {
     }
 
     @ViewBuilder
-    private func header(windows: [UsageWindow], maxWindow: UsageWindow?) -> some View {
+    private func header(windows: [UsageWindow]) -> some View {
         // Narrow single-pool cells carry their reset under the number, so the header is just the name.
         let count: String? = switch windows.count {
         case 0: nil
@@ -528,7 +478,7 @@ private struct MediumCell: View {
     }
 
     /// Narrow single-pool cell: big number beside label and reset, full-width bar.
-    private func bigNumber(_ window: UsageWindow, isMax: Bool) -> some View {
+    private func bigNumber(_ window: UsageWindow) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .center, spacing: 5) {
                 Text(Fmt.percent(window.usedPercent))
@@ -540,14 +490,9 @@ private struct MediumCell: View {
                     .minimumScaleFactor(0.7)
                     .layoutPriority(1)
                 VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 3) {
-                        if isMax {
-                            MaxTag(size: 8)
-                        }
-                        Text(window.label.lowercased())
-                            .foregroundStyle(TMX.fg)
-                            .minimumScaleFactor(0.6)
-                    }
+                    Text(window.label.lowercased())
+                        .foregroundStyle(TMX.fg)
+                        .minimumScaleFactor(0.6)
                     if let resetsAt = window.resetsAt {
                         (Text("resets ").foregroundStyle(TMX.dim)
                          + Text(Fmt.compactCountdown(to: resetsAt, now: entry.date))
@@ -568,18 +513,18 @@ private struct MediumCell: View {
     }
 
     /// "label · reset" over "bar · %".
-    private func twoLinePool(_ window: UsageWindow, isMax: Bool) -> some View {
+    private func twoLinePool(_ window: UsageWindow) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             ViewThatFits(in: .horizontal) {
-                twoLinePoolLabel(window, label: window.label.lowercased(), isMax: isMax, scales: false)
-                twoLinePoolLabel(window, label: window.shortLabel, isMax: isMax, scales: false)
-                twoLinePoolLabel(window, label: window.shortLabel, isMax: isMax, scales: true)
+                twoLinePoolLabel(window, label: window.label.lowercased(), scales: false)
+                twoLinePoolLabel(window, label: window.shortLabel, scales: false)
+                twoLinePoolLabel(window, label: window.shortLabel, scales: true)
             }
             HStack(spacing: 5) {
                 PartialSegmentBar(usedPercent: window.usedPercent, segments: wide ? 24 : 14, height: 6)
                 Text(Fmt.percent(window.usedPercent))
                     .font(TMX.font(size: 9.5, weight: .bold))
-                    .foregroundStyle(isMax ? TMX.orange : TMX.hi)
+                    .foregroundStyle(TMX.hi)
                     .lineLimit(1)
                     .fixedSize()
                     .frame(minWidth: 22, alignment: .trailing)
@@ -588,15 +533,12 @@ private struct MediumCell: View {
         .padding(.top, 2)
     }
 
-    private func twoLinePoolLabel(_ window: UsageWindow, label: String, isMax: Bool, scales: Bool) -> some View {
+    private func twoLinePoolLabel(_ window: UsageWindow, label: String, scales: Bool) -> some View {
         HStack(spacing: 4) {
             Text(label)
-                .foregroundStyle(isMax ? TMX.orange : TMX.fg)
+                .foregroundStyle(TMX.fg)
                 .minimumScaleFactor(scales ? 0.6 : 1)
                 .fixedSize(horizontal: !scales, vertical: false)
-            if isMax {
-                MaxTag(size: 8)
-            }
             Spacer(minLength: 4)
             if let resetsAt = window.resetsAt {
                 Text(Fmt.compactCountdown(to: resetsAt, now: entry.date))
@@ -610,27 +552,18 @@ private struct MediumCell: View {
 
     /// One row per pool: label · bar · % · reset (narrow cells drop the bar).
     /// `scales` is the last resort: labels shrink instead of overflowing.
-    private func oneLineRows(_ windows: [UsageWindow], maxWindow: UsageWindow?, short: Bool, scales: Bool) -> some View {
+    private func oneLineRows(_ windows: [UsageWindow], short: Bool, scales: Bool) -> some View {
         let labels = windows.map { short ? $0.shortLabel : $0.label.lowercased() }
-        let tagWidth: CGFloat = 26
-        let labelWidth = scales ? 0 : zip(windows, labels).map { window, label in
-            monoWidth(label.count, size: 9) + (window.id == maxWindow?.id ? tagWidth : 0)
-        }.max() ?? 0
+        let labelWidth = scales ? 0 : labels.map { monoWidth($0.count, size: 9) }.max() ?? 0
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(windows.enumerated()), id: \.element.id) { index, window in
-                let isMax = window.id == maxWindow?.id
                 HStack(spacing: 3) {
-                    HStack(spacing: 3) {
-                        Text(labels[index])
-                            .foregroundStyle(isMax ? TMX.orange : TMX.fg)
-                            .minimumScaleFactor(scales ? 0.6 : 1)
-                            .fixedSize(horizontal: !scales, vertical: false)
-                        if isMax {
-                            MaxTag(size: 8)
-                        }
-                    }
-                    .frame(minWidth: labelWidth, alignment: .leading)
-                    .layoutPriority(scales ? 1 : 0)
+                    Text(labels[index])
+                        .foregroundStyle(TMX.fg)
+                        .minimumScaleFactor(scales ? 0.6 : 1)
+                        .fixedSize(horizontal: !scales, vertical: false)
+                        .frame(minWidth: labelWidth, alignment: .leading)
+                        .layoutPriority(scales ? 1 : 0)
                     if wide {
                         PartialSegmentBar(usedPercent: window.usedPercent, segments: 16, height: 6)
                             .frame(minWidth: scales ? 0 : 16, idealWidth: 40, maxWidth: .infinity)
@@ -639,7 +572,7 @@ private struct MediumCell: View {
                     }
                     Text(Fmt.percent(window.usedPercent))
                         .fontWeight(.bold)
-                        .foregroundStyle(isMax ? TMX.orange : TMX.hi)
+                        .foregroundStyle(TMX.hi)
                         .fixedSize()
                         .frame(minWidth: 18, alignment: .trailing)
                     Text(window.resetsAt.map { Fmt.compactCountdown(to: $0, now: entry.date) } ?? "")
@@ -770,16 +703,11 @@ private struct LargeTable: View {
     private static let percentWidth: CGFloat = 30
     private static let resetWidth: CGFloat = 30
     private static let labelSize: CGFloat = 9.5
-    private static let maxTagWidth: CGFloat = 30
 
     var body: some View {
-        let maxID = entry.maxItemID
         // Monospaced, so the widest label sets a shared column; labels never truncate.
         let labelWidth: CGFloat = services.flatMap { snapshot in
-            snapshot.windows.map { window in
-                monoWidth(window.label.count, size: Self.labelSize)
-                    + (entry.isMax(window, of: snapshot.kind, maxID: maxID) ? Self.maxTagWidth : 0)
-            }
+            snapshot.windows.map { monoWidth($0.label.count, size: Self.labelSize) }
         }.max() ?? 0
 
         VStack(alignment: .leading, spacing: 0) {
@@ -803,7 +731,6 @@ private struct LargeTable: View {
                     .padding(.top, 7)
                 ForEach(snapshot.windows) { window in
                     row(window, kind: snapshot.kind, labelWidth: labelWidth,
-                        isMax: entry.isMax(window, of: snapshot.kind, maxID: maxID),
                         flagged: flagged.contains("\(snapshot.kind.rawValue).\(window.id)"))
                 }
             }
@@ -837,17 +764,12 @@ private struct LargeTable: View {
     }
 
     private func row(_ window: UsageWindow, kind: ServiceKind, labelWidth: CGFloat,
-                     isMax: Bool, flagged: Bool) -> some View {
+                     flagged: Bool) -> some View {
         HStack(spacing: 6) {
-            HStack(spacing: 4) {
-                Text(window.label.lowercased())
-                    .foregroundStyle(flagged ? TMX.hi : TMX.fg)
-                    .fixedSize()
-                if isMax {
-                    MaxTag()
-                }
-            }
-            .frame(minWidth: labelWidth, alignment: .leading)
+            Text(window.label.lowercased())
+                .foregroundStyle(flagged ? TMX.hi : TMX.fg)
+                .fixedSize()
+                .frame(minWidth: labelWidth, alignment: .leading)
 
             PartialSegmentBar(usedPercent: window.usedPercent, segments: Self.segments, height: 9)
                 .frame(maxWidth: .infinity)

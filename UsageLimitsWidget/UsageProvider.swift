@@ -149,17 +149,6 @@ extension UsageEntry {
         return snapshot
     }
 
-    /// The single highest-used pool across every provider (tagged MAX), if any usage is reported.
-    var maxItemID: String? {
-        let items = available.flatMap { snapshot in
-            snapshot.windows.map { FocusItem(snapshot: snapshot, window: $0) }
-        }
-        // `max(by:)` keeps the first of equal maxima, so ties go to the first in canonical order.
-        guard let top = items.max(by: { $0.window.usedPercent < $1.window.usedPercent }),
-              top.window.usedPercent > 0 else { return nil }
-        return top.id
-    }
-
     /// Use-it-or-lose-it nudges for providers with data, soonest reset first, minus ones dismissed in the app.
     var nudges: [UseItNudge] {
         UseItNudge
