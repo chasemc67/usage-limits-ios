@@ -15,7 +15,7 @@ struct UsageLimitsWidget: Widget {
         AppIntentConfiguration(kind: kind, intent: UsageConfigurationIntent.self, provider: UsageProvider()) { entry in
             UsageWidgetView(entry: entry)
         }
-        .configurationDisplayName("Usage Limits")
+        .configurationDisplayName("Token Maxx")
         .description("Your AI usage limits and when they reset.")
         .supportedFamilies([
             .systemSmall,

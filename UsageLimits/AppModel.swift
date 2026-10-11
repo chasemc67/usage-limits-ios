@@ -8,11 +8,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var signedIn: [ServiceKind: Bool] = [:]
     @Published private(set) var refreshing: Set<ServiceKind> = []
     @Published var sheetKind: ServiceKind?
+    /// Dismissed "use it or lose it" nudges: nudge key -> the reset date it applies to.
+    @Published private(set) var dismissedNudges: [String: Date]
 
     private var lastRefresh: Date?
 
     init() {
         snapshots = SnapshotStore.loadAll()
+        dismissedNudges = NudgeDismissals.load()
         reloadAuthState()
     }
 
@@ -63,6 +66,18 @@ final class AppModel: ObservableObject {
         reloadAuthState()
         let group = kind.credentialGroup
         Task { await refresh(group) }
+    }
+
+    func isDismissed(_ nudge: UseItNudge) -> Bool {
+        dismissedNudges[nudge.dismissalKey] != nil
+    }
+
+    /// Hides a nudge until its window resets; a new `resetsAt` produces a new key and re-shows it.
+    func dismiss(_ nudge: UseItNudge) {
+        var updated = dismissedNudges.filter { $0.value > Date() }
+        updated[nudge.dismissalKey] = nudge.resetsAt
+        dismissedNudges = updated
+        NudgeDismissals.save(updated)
     }
 
     func signOut(_ kind: ServiceKind) {

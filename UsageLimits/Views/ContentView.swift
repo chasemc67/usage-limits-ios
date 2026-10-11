@@ -6,33 +6,42 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    StatusHeader()
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 16) {
+                        UseItBannerStack { kind in
+                            withAnimation(.snappy) {
+                                proxy.scrollTo(kind, anchor: .top)
+                            }
+                        }
 
-                    if !model.anySignedIn {
-                        EmptyStateCard()
+                        StatusHeader()
+
+                        if !model.anySignedIn {
+                            EmptyStateCard()
+                        }
+
+                        ForEach(ServiceKind.allCases) { kind in
+                            ServiceCard(kind: kind)
+                                .id(kind)
+                        }
+
+                        Text("Unofficial. Uses private endpoints that may change at any time. Tokens are stored only in this device's Keychain.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 8)
+                            .padding(.horizontal)
                     }
-
-                    ForEach(ServiceKind.allCases) { kind in
-                        ServiceCard(kind: kind)
-                    }
-
-                    Text("Unofficial. Uses private endpoints that may change at any time. Tokens are stored only in this device's Keychain.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 8)
-                        .padding(.horizontal)
+                    .padding(.horizontal)
+                    .padding(.bottom, 24)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 24)
             }
             .background(BackgroundGradient().ignoresSafeArea())
             .refreshable {
                 await model.refreshAll()
             }
-            .navigationTitle("Usage Limits")
+            .navigationTitle("Token Maxx")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {

@@ -1,4 +1,4 @@
-# Usage Limits
+# Token Maxx
 
 A small personal iOS app plus a set of widgets that show how much of your AI coding-tool
 quotas you've used and when each one resets:

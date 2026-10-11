@@ -59,7 +59,7 @@ private struct EmptyWidgetView: View {
             Image(systemName: "gauge.with.dots.needle.33percent")
                 .font(compact ? .title3 : .title)
                 .foregroundStyle(.secondary)
-            Text("Open Usage Limits to sign in")
+            Text("Open Token Maxx to sign in")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -148,7 +148,7 @@ private struct LargeWidgetView: View {
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Usage Limits")
+                    Text("Token Maxx")
                         .font(.headline)
                     Spacer()
                     if let updated = entry.lastUpdated {
@@ -295,7 +295,7 @@ private struct RectangularAccessoryView: View {
                 .font(.caption)
             }
         } else {
-            Text("Usage Limits: sign in")
+            Text("Token Maxx: sign in")
                 .font(.caption)
         }
     }
@@ -312,7 +312,7 @@ private struct InlineAccessoryView: View {
                 Text("\(item.kind.displayName) \(Fmt.percent(item.window.usedPercent))")
             }
         } else {
-            Text("Usage Limits")
+            Text("Token Maxx")
         }
     }
 }
