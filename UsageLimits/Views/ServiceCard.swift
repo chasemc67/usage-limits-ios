@@ -41,7 +41,7 @@ struct ServiceCard: View {
 
     private func header(snapshot: ServiceSnapshot?, signedIn: Bool) -> some View {
         HStack(alignment: .center, spacing: 10) {
-            ServiceIcon(kind: kind, size: 20)
+            ProviderLogo(kind: kind, size: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(kind.displayName.uppercased())
                     .font(TMX.font(.headline, weight: .bold))

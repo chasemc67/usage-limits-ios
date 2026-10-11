@@ -95,7 +95,7 @@ struct ServiceSettingsSheet: View {
     private var statusSection: some View {
         Section {
             HStack(spacing: 12) {
-                ServiceIcon(kind: kind, size: 32)
+                ProviderLogo(kind: kind, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(kind.displayName.uppercased())
                         .font(TMX.font(.headline, weight: .bold))

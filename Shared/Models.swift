@@ -18,12 +18,13 @@ enum ServiceKind: String, CaseIterable, Codable, Sendable, Hashable, Identifiabl
         }
     }
 
-    var iconSystemName: String {
+    /// Template image in Shared/ProviderLogos.xcassets.
+    var logoAssetName: String {
         switch self {
-        case .cursor: return "cursorarrow.rays"
-        case .grokBot: return "sparkles"
-        case .codex: return "chevron.left.forwardslash.chevron.right"
-        case .claude: return "asterisk"
+        case .cursor: return "LogoCursor"
+        case .grokBot: return "LogoGrok"
+        case .codex: return "LogoOpenAI"
+        case .claude: return "LogoClaude"
         }
     }
 

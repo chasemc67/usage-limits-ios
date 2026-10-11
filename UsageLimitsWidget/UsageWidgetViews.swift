@@ -255,7 +255,7 @@ private struct SmallWidgetView: View {
             }
             Spacer(minLength: 0)
             if count == 1 {
-                ServiceIcon(kind: snapshot.kind, size: 14)
+                ProviderLogo(kind: snapshot.kind, size: 14)
                     .widgetAccentable()
             }
         }
@@ -495,7 +495,7 @@ private struct MediumCell: View {
     @ViewBuilder
     private func header(windows: [UsageWindow], maxWindow: UsageWindow?) -> some View {
         HStack(spacing: 5) {
-            ServiceIcon(kind: kind, size: 12)
+            ProviderLogo(kind: kind, size: 12)
                 .widgetAccentable()
             Text(kind.displayName.lowercased())
                 .font(TMX.font(size: 9.5, weight: .bold))
@@ -669,7 +669,7 @@ private struct NudgeBanner: View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    ServiceIcon(kind: nudge.kind, size: 14)
+                    ProviderLogo(kind: nudge.kind, size: 14)
                         .widgetAccentable()
                     Text("\(nudge.kind.displayName.lowercased()) · \(nudge.window.label.lowercased())")
                         .font(TMX.font(size: 11, weight: .bold))
@@ -785,7 +785,7 @@ private struct LargeTable: View {
     private func groupHeader(_ snapshot: ServiceSnapshot) -> some View {
         let count = snapshot.windows.count
         return HStack(spacing: 6) {
-            ServiceIcon(kind: snapshot.kind, size: 13)
+            ProviderLogo(kind: snapshot.kind, size: 13)
                 .widgetAccentable()
             Text(snapshot.kind.displayName.uppercased())
                 .font(TMX.font(size: 10, weight: .bold))
@@ -860,7 +860,7 @@ private struct CircularAccessoryView: View {
     var body: some View {
         if let item = entry.focus {
             Gauge(value: min(max(item.window.usedPercent, 0), 100), in: 0...100) {
-                Image(systemName: item.kind.iconSystemName)
+                ProviderLogo(kind: item.kind, size: 14)
             } currentValueLabel: {
                 Text("\(Int(item.window.usedPercent.rounded()))")
                     .font(.system(.body, design: .monospaced, weight: .bold))
@@ -884,7 +884,7 @@ private struct RectangularAccessoryView: View {
         if let item = entry.focus {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Image(systemName: item.kind.iconSystemName)
+                    ProviderLogo(kind: item.kind, size: 18)
                     Text("\(item.kind.displayName) · \(item.window.label.lowercased())")
                         .lineLimit(1)
                 }

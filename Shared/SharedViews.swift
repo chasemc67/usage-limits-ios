@@ -16,14 +16,17 @@ struct UsageBar: View {
     }
 }
 
-/// Bare orange service glyph.
-struct ServiceIcon: View {
+/// Bare orange provider logo.
+struct ProviderLogo: View {
     var kind: ServiceKind
     var size: CGFloat = 28
 
     var body: some View {
-        Image(systemName: kind.iconSystemName)
-            .font(.system(size: size * 0.62, weight: .semibold))
+        Image(kind.logoAssetName)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size * 0.7, height: size * 0.7)
             .foregroundStyle(TMX.orange)
             .frame(width: size, height: size)
     }

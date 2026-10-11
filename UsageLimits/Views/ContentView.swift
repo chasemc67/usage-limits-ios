@@ -93,7 +93,7 @@ private struct TitleHeader: View {
                     Button {
                         model.sheetKind = kind
                     } label: {
-                        Label(kind.displayName, systemImage: kind.iconSystemName)
+                        Label(kind.displayName, image: kind.logoAssetName)
                     }
                 }
             } label: {
