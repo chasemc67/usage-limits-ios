@@ -199,7 +199,6 @@ struct UsageWindowRow: View {
                         .foregroundStyle(TMX.dim)
                 }
             }
-            .padding(.leading, 30)
         }
         .accessibilityElement(children: .combine)
     }
