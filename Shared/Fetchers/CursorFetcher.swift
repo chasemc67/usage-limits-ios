@@ -3,6 +3,7 @@ import Foundation
 struct CursorFetcher: ServiceFetcher {
     static let usageSummaryURL = URL(string: "https://cursor.com/api/usage-summary")!
     static let aggregatedUsageURL = URL(string: "https://cursor.com/api/dashboard/get-aggregated-usage-events")!
+    static let filteredUsageURL = URL(string: "https://cursor.com/api/dashboard/get-filtered-usage-events")!
 
     func fetch() async -> ServiceSnapshot {
         guard let raw = TokenStore.cursorSessionToken,
@@ -113,8 +114,15 @@ struct CursorFetcher: ServiceFetcher {
         var thirdPartyCents: Double?
         var thirdPartySince: Date?
         let now = Date()
-        if let start = UnifiedPlan.thirdPartyWindowStart(summary: summary, sand: status, now: now) {
-            thirdPartyCents = try? await Self.fetchThirdPartyCents(cookie: cookie, start: start, end: now)
+        let defaults = AppGroup.defaults
+        let stored = defaults.object(forKey: UnifiedPlan.unifiedSinceKey) as? Date
+        let observed = UnifiedPlan.periodStartDate(status["currentPeriodStart"], calendar: .current)
+        let unifiedSince = UnifiedPlan.unifiedSince(stored: stored, observed: observed)
+        if let unifiedSince, unifiedSince != stored {
+            defaults.set(unifiedSince, forKey: UnifiedPlan.unifiedSinceKey)
+        }
+        if let start = UnifiedPlan.thirdPartyWindowStart(unifiedSince: unifiedSince, now: now) {
+            thirdPartyCents = await Self.fetchThirdPartyCents(cookie: cookie, start: start, end: now)
             if thirdPartyCents != nil { thirdPartySince = start }
         }
 
@@ -141,16 +149,44 @@ struct CursorFetcher: ServiceFetcher {
         ]
     }
 
-    /// Cents spent on third-party models (billed at API rates) between `start` and `end`,
-    /// or nil when the response carries no aggregations.
-    private static func fetchThirdPartyCents(cookie: String, start: Date, end: Date) async throws -> Double? {
-        var request = HTTP.request(aggregatedUsageURL, method: "POST", headers: dashboardHeaders(cookie: cookie))
+    /// Billed cents on third-party models (API rates) between `start` and `end`: from per-event
+    /// usage when available, else from aggregated usage if it reports billed amounts; nil when
+    /// neither can say what was billed.
+    private static func fetchThirdPartyCents(cookie: String, start: Date, end: Date) async -> Double? {
+        if let events = try? await fetchUsageEvents(cookie: cookie, start: start, end: end) {
+            return UnifiedPlan.thirdPartyCents(fromUsageEvents: events)
+        }
+        guard let json = try? await postDashboard(aggregatedUsageURL, cookie: cookie,
+                                                  body: UnifiedPlan.aggregatedUsageBody(start: start, end: end))
+        else { return nil }
+        return UnifiedPlan.thirdPartyCents(fromAggregatedUsage: json)
+    }
+
+    /// All usage events between `start` and `end`, up to `UnifiedPlan.usageEventsMaxPages` pages.
+    /// Throws if any page fails, so a partial list is never summed.
+    private static func fetchUsageEvents(cookie: String, start: Date, end: Date) async throws -> [JSONValue] {
+        var events: [JSONValue] = []
+        for page in 1...UnifiedPlan.usageEventsMaxPages {
+            let json = try await postDashboard(filteredUsageURL, cookie: cookie,
+                                               body: UnifiedPlan.filteredUsageBody(start: start, end: end, page: page))
+            guard let pageEvents = UnifiedPlan.usageEvents(fromFilteredUsage: json) else {
+                throw ServiceError.invalidResponse("get-filtered-usage-events")
+            }
+            events += pageEvents
+            let total = json["totalUsageEventsCount"].int ?? events.count
+            if pageEvents.count < UnifiedPlan.usageEventsPageSize || events.count >= total { break }
+        }
+        return events
+    }
+
+    private static func postDashboard(_ url: URL, cookie: String, body: [String: Any]) async throws -> JSONValue {
+        var request = HTTP.request(url, method: "POST", headers: dashboardHeaders(cookie: cookie))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: UnifiedPlan.aggregatedUsageBody(start: start, end: end))
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let result = try await HTTP.send(request)
         guard result.isSuccess, let json = result.json else { throw result.serviceError() }
-        return UnifiedPlan.thirdPartyCents(fromAggregatedUsage: json)
+        return json
     }
 
     static func fetchSummary(cookie: String) async throws -> JSONValue {

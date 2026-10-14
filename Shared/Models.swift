@@ -91,10 +91,10 @@ struct ServiceSnapshot: Codable, Sendable, Hashable, Identifiable {
     var extras: [String]
     var fetchedAt: Date
     var error: String?
-    /// Cursor (X Subscription): spend on third-party models at API rates this billing cycle.
+    /// Cursor (X Subscription): billed spend on third-party models at API rates since `thirdPartySince`.
     /// Optional with a default so snapshots cached by older builds still decode.
     var thirdPartyCents: Double? = nil
-    /// Start of the window `thirdPartyCents` covers (billing cycle start, or the sand period start).
+    /// Start of the window `thirdPartyCents` covers (the later of the sand period start and the month start).
     var thirdPartySince: Date? = nil
     /// Cursor / Grok Bot: whether the account is unified (X Subscription). Optional for the same reason.
     var unified: Bool? = nil

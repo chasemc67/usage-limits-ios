@@ -83,15 +83,28 @@ enum UnifiedPlan {
 
     // MARK: - Third-party spend
 
-    // Where third-party spend comes from, and why only there:
-    // * On unified accounts `individualUsage.plan` in usage-summary still carries a dollar pool
-    //   (live: `used` 0 of `limit` 55395 cents, `apiPercentUsed` 0). That is the plan's
-    //   included/prepaid credit, not a record of third-party spend, so it is never shown as 3P
-    //   spend; nor is `individualUsage.onDemand`, which covers on-demand billing generally.
-    // * The only clearly-labelled per-model spend is get-aggregated-usage-events: `totalCents`
-    //   per `modelIntent`, summed over models that aren't Cursor's or xAI's own.
-    // * A successful response with no third-party models is real data and shows $0.00. A failed
-    //   request or one without `aggregations` shows nothing rather than a guess.
+    // Third-party models on unified accounts are billed at API list price, and grok.com's
+    // Billing page ("Monthly additional usage") is the true record of that. It lives on
+    // grok.com/dashboard/billing behind separate grok.com auth that the Cursor cookie can't
+    // reach, so it isn't used; the line is derived from Cursor's usage events instead.
+    // * Only billed usage counts. Cursor's per-event `kind` separates usage covered by the plan
+    //   (USAGE_EVENT_KIND_INCLUDED_IN_PRO / ..._INCLUDED_IN_BUSINESS / ...) from usage billed on
+    //   top (USAGE_EVENT_KIND_USAGE_BASED), and `chargedCents` is what was actually charged.
+    //   `tokenUsage.totalCents` is the API-price cost of the tokens whether billed or not (one
+    //   live account showed $319.27 of it against $0.00 of additional usage), so on its own it
+    //   is never treated as spend.
+    // * get-filtered-usage-events is preferred: it carries `kind` / `chargedCents` per event.
+    //   get-aggregated-usage-events is a fallback only when its items carry an explicit billed
+    //   field; with only `totalCents` the line is hidden (nil) rather than overstated.
+    // * `individualUsage.plan` (live: `used` 0 of `limit` 55395 cents) is the plan's included
+    //   credit and `individualUsage.onDemand` covers on-demand billing generally; neither is a
+    //   record of third-party spend, so neither is shown as such.
+    // * A successful response with no billed third-party events is real data and shows $0.00.
+
+    static let usageEventsPageSize = 500
+    /// Cap on get-filtered-usage-events pages per refresh (5,000 events); beyond it the total
+    /// covers only the most recent events.
+    static let usageEventsMaxPages = 10
 
     /// First-party model ids, matched on the name after any "vendor/" prefix: grok*, composer*,
     /// cursor / cursor-*, and the exact pseudo-models "auto" and "default". Whole-name and
@@ -103,27 +116,97 @@ enum UnifiedPlan {
         return ["grok", "composer", "cursor-"].contains { model.hasPrefix($0) }
     }
 
-    /// Sum of `totalCents` (number or int64 string) over non-first-party models in a
-    /// get-aggregated-usage-events response, or nil when the response has no `aggregations` array.
-    static func thirdPartyCents(fromAggregatedUsage json: JSONValue) -> Double? {
-        guard let aggregations = json["aggregations"].array else { return nil }
-        return aggregations.reduce(0) { sum, item in
-            guard let model = (item["modelIntent"].nonEmptyString ?? item["model"].nonEmptyString),
-                  !isFirstPartyModel(model),
-                  let cents = item["totalCents"].double, cents.isFinite else { return sum }
-            return sum + cents
-        }
+    /// The events on one get-filtered-usage-events page. An empty page may omit the array
+    /// (proto3 JSON drops empty repeated fields), so `{}` or a zero count is an empty page;
+    /// anything else without `usageEventsDisplay` is nil.
+    static func usageEvents(fromFilteredUsage json: JSONValue) -> [JSONValue]? {
+        if let events = json["usageEventsDisplay"].array { return events }
+        guard let object = json.object else { return nil }
+        if object.isEmpty || json["totalUsageEventsCount"].double == 0 { return [] }
+        return nil
     }
 
-    /// Start of the 3P spend window: the billing cycle start, else one month before the cycle
-    /// end, else the sand period start. Nil when none is known or it isn't before `now`.
-    static func thirdPartyWindowStart(summary: JSONValue?, sand: JSONValue?, now: Date) -> Date? {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        let cycleStart = summary?["billingCycleStart"].date
-            ?? summary?["billingCycleEnd"].date.flatMap { calendar.date(byAdding: .month, value: -1, to: $0) }
-        guard let start = cycleStart ?? sand?["currentPeriodStart"].date, start < now else { return nil }
-        return start
+    /// Billed cents across third-party usage events; 0 when none were billed.
+    static func thirdPartyCents(fromUsageEvents events: [JSONValue]) -> Double {
+        events.reduce(0) { $0 + (billedThirdPartyCents($1) ?? 0) }
+    }
+
+    /// What one usage event was billed, or nil when it doesn't count: a first-party (or unnamed)
+    /// model, an included / free / errored kind, or nothing marking it as billed.
+    /// Amount: `chargedCents`, else `usageBasedCosts`, else `tokenUsage.totalCents` only for
+    /// USAGE_BASED kinds.
+    static func billedThirdPartyCents(_ event: JSONValue) -> Double? {
+        guard let model = event["model"].nonEmptyString, !isFirstPartyModel(model) else { return nil }
+        let kind = event["kind"].string?.uppercased() ?? ""
+        if ["INCLUDED", "FREE", "ERRORED"].contains(where: { kind.contains($0) }) { return nil }
+        let charged = event["chargedCents"].double.flatMap { $0.isFinite ? $0 : nil }
+        let usageBased = kind.contains("USAGE_BASED")
+        guard usageBased || event["isChargeable"].bool == true || (charged ?? 0) > 0 else { return nil }
+        let cents = charged
+            ?? usageBasedCostCents(event["usageBasedCosts"])
+            ?? (usageBased ? event["tokenUsage"]["totalCents"].double : nil)
+        guard let cents, cents.isFinite else { return nil }
+        return max(0, cents)
+    }
+
+    /// `usageBasedCosts` as cents. Cursor renders it as a dollar string ("$2.50"); bare numbers
+    /// have no stated unit, so they're ignored rather than guessed at.
+    static func usageBasedCostCents(_ value: JSONValue) -> Double? {
+        guard let text = value.string?.trimmingCharacters(in: .whitespaces), text.hasPrefix("$"),
+              let dollars = Double(text.dropFirst().replacingOccurrences(of: ",", with: "")) else { return nil }
+        return dollars * 100
+    }
+
+    /// Fallback: billed cents over third-party models in a get-aggregated-usage-events response.
+    /// Each third-party item must carry an explicit billed field (`chargedCents` /
+    /// `usageBasedCents`); `totalCents` includes plan-covered cost, so any third-party item with
+    /// only that makes the whole result nil. Nil too without an `aggregations` array.
+    static func thirdPartyCents(fromAggregatedUsage json: JSONValue) -> Double? {
+        guard let aggregations = json["aggregations"].array else { return nil }
+        var sum: Double = 0
+        for item in aggregations {
+            guard let model = (item["modelIntent"].nonEmptyString ?? item["model"].nonEmptyString),
+                  !isFirstPartyModel(model) else { continue }
+            guard let cents = item["chargedCents"].double ?? item["usageBasedCents"].double,
+                  cents.isFinite else { return nil }
+            sum += cents
+        }
+        return sum
+    }
+
+    /// App Group key for the earliest GetSandUsageStatus `currentPeriodStart` seen while unified.
+    static let unifiedSinceKey = "tmx.unifiedSince"
+
+    /// The new unification anchor: the earlier of the stored anchor and the `currentPeriodStart`
+    /// observed now. `currentPeriodStart` is the weekly pool's start and moves every week, so only
+    /// the earliest one seen approximates when the account unified.
+    static func unifiedSince(stored: Date?, observed: Date?) -> Date? {
+        guard let stored else { return observed }
+        guard let observed else { return stored }
+        return min(stored, observed)
+    }
+
+    /// Start of the 3P spend window: the later of `unifiedSince` (see `unifiedSince(stored:observed:)`)
+    /// and the start of the current calendar month in `calendar`'s time zone (the user's).
+    /// grok.com's "Monthly additional usage" is per calendar month, and nothing before
+    /// unification was billed at API rates under the X Subscription. Cursor's `billingCycleStart`
+    /// predates unification on migrated accounts, so it is never used here. Nil when the start
+    /// isn't before `now`.
+    static func thirdPartyWindowStart(unifiedSince: Date?, now: Date, calendar: Calendar = .current) -> Date? {
+        guard let monthStart = calendar.dateInterval(of: .month, for: now)?.start else { return nil }
+        let start = max(monthStart, unifiedSince ?? monthStart)
+        return start < now ? start : nil
+    }
+
+    /// A date-only value ("2026-10-12") is that day's midnight in `calendar`'s time zone, so the
+    /// "since" label shows the same day; anything else parses as usual.
+    static func periodStartDate(_ value: JSONValue, calendar: Calendar) -> Date? {
+        if let text = value.string?.trimmingCharacters(in: .whitespaces),
+           text.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil {
+            let parts = text.split(separator: "-").compactMap { Int($0) }
+            return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+        }
+        return value.date
     }
 
     /// get-aggregated-usage-events request body: int64 ms-epoch strings, as cursor.com sends them.
@@ -133,6 +216,12 @@ enum UnifiedPlan {
             "startDate": String(Int64(start.timeIntervalSince1970 * 1000)),
             "endDate": String(Int64(end.timeIntervalSince1970 * 1000)),
         ]
+    }
+
+    /// get-filtered-usage-events request body: the aggregated body plus 1-based paging.
+    static func filteredUsageBody(start: Date, end: Date, page: Int,
+                                  pageSize: Int = usageEventsPageSize) -> [String: Any] {
+        aggregatedUsageBody(start: start, end: end).merging(["page": page, "pageSize": pageSize]) { $1 }
     }
 }
 
