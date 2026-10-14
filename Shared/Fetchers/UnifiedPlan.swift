@@ -63,3 +63,70 @@ enum UnifiedPlan {
         }
     }
 }
+
+// MARK: - xAI section
+
+extension ServiceSnapshot {
+    /// Snapshots cached before `unified` existed are unified if they carry the mirrored shared pool.
+    var isUnified: Bool {
+        unified ?? windows.contains { $0.id == UnifiedPlan.cursorSharedWindowID }
+    }
+}
+
+extension UnifiedPlan {
+    /// Cursor decides when it has data; otherwise Grok Bot's flag.
+    static func isUnified(_ snapshots: [ServiceKind: ServiceSnapshot]) -> Bool {
+        if let cursor = snapshots[.cursor], !cursor.windows.isEmpty { return cursor.isUnified }
+        return snapshots[.grokBot]?.isUnified ?? false
+    }
+
+    /// Display order. On unified accounts xAI takes Cursor's place and Grok Bot is folded in.
+    static func sectionKinds(_ snapshots: [ServiceKind: ServiceSnapshot]) -> [ServiceKind] {
+        guard isUnified(snapshots) else { return ServiceKind.allCases }
+        return ServiceKind.allCases.compactMap { kind -> ServiceKind? in
+            switch kind {
+            case .cursor: return .xai
+            case .grokBot: return nil
+            default: return kind
+            }
+        }
+    }
+
+    /// The section showing `kind`: Cursor / Grok Bot map to xAI when unified, xAI to Cursor otherwise.
+    static func section(for kind: ServiceKind, in snapshots: [ServiceKind: ServiceSnapshot]) -> ServiceKind {
+        switch kind {
+        case .cursor, .grokBot: return isUnified(snapshots) ? .xai : kind
+        case .xai: return isUnified(snapshots) ? .xai : .cursor
+        default: return kind
+        }
+    }
+
+    /// A section's snapshot; xAI is derived, everything else is stored as fetched.
+    static func sectionSnapshot(_ kind: ServiceKind,
+                                in snapshots: [ServiceKind: ServiceSnapshot]) -> ServiceSnapshot? {
+        kind == .xai ? xaiSnapshot(snapshots) : snapshots[kind]
+    }
+
+    /// Cursor's unified snapshot (shared weekly pool, Plan, 3P spend) relabelled as xAI.
+    /// Falls back to Grok Bot's copy of the pool when Cursor has no data.
+    static func xaiSnapshot(_ snapshots: [ServiceKind: ServiceSnapshot]) -> ServiceSnapshot? {
+        guard isUnified(snapshots) else { return nil }
+        let cursor = snapshots[.cursor]
+        var result: ServiceSnapshot
+        if let cursor, !cursor.windows.isEmpty {
+            result = cursor
+        } else if let grok = snapshots[.grokBot] {
+            result = grok
+            result.extras = grok.extras.filter { !$0.hasPrefix("Cursor plan:") }
+            result.thirdPartyCents = cursor?.thirdPartyCents
+            result.error = cursor?.error ?? grok.error
+        } else if let cursor {
+            result = cursor
+        } else {
+            return nil
+        }
+        result.kind = .xai
+        result.unified = true
+        return result
+    }
+}

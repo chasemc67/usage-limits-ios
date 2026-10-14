@@ -173,7 +173,7 @@ private struct SmallWidgetView: View {
     let entry: UsageEntry
 
     var body: some View {
-        let kind = entry.provider.kind
+        let kind = entry.section(for: entry.provider.kind)
         if let snapshot = entry.snapshot(for: kind) {
             VStack(alignment: .leading, spacing: 0) {
                 header(snapshot)
@@ -386,15 +386,19 @@ private struct MediumWidgetView: View {
                     let gap: CGFloat = 5
                     // 195 : 132, as in the mockup.
                     let wide = ((proxy.size.width - gap) * 195 / 327).rounded()
+                    // Unified accounts: one xAI cell for Cursor + Grok Bot; Codex takes the full column.
+                    let unified = UnifiedPlan.isUnified(entry.snapshots)
                     HStack(spacing: gap) {
                         VStack(spacing: gap) {
                             MediumCell(entry: entry, kind: .claude, wide: true)
-                            MediumCell(entry: entry, kind: .cursor, wide: true)
+                            MediumCell(entry: entry, kind: unified ? .xai : .cursor, wide: true)
                         }
                         .frame(width: wide)
                         VStack(spacing: gap) {
                             MediumCell(entry: entry, kind: .codex, wide: false)
-                            MediumCell(entry: entry, kind: .grokBot, wide: false)
+                            if !unified {
+                                MediumCell(entry: entry, kind: .grokBot, wide: false)
+                            }
                         }
                     }
                 }
@@ -416,7 +420,7 @@ private struct MediumCell: View {
             header(windows: windows)
 
             if windows.isEmpty {
-                Text((entry.snapshots[kind]?.error ?? "not signed in").lowercased())
+                Text((UnifiedPlan.sectionSnapshot(kind, in: entry.snapshots)?.error ?? "not signed in").lowercased())
                     .font(TMX.font(size: 9))
                     .foregroundStyle(TMX.dim)
                     .lineLimit(2)
@@ -935,16 +939,19 @@ private struct InlineAccessoryView: View {
     UsageEntry.sample(provider: .cursor)
     UsageEntry.sample(provider: .grokBot)
     UsageEntry.sample(provider: .codex)
+    UsageEntry.sample(provider: .xai, unified: true)
 }
 
 #Preview(as: .systemMedium) {
     UsageOverviewWidget()
 } timeline: {
     UsageEntry.sample()
+    UsageEntry.sample(unified: true)
 }
 
 #Preview(as: .systemLarge) {
     UsageOverviewWidget()
 } timeline: {
     UsageEntry.sample()
+    UsageEntry.sample(unified: true)
 }

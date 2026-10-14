@@ -9,7 +9,8 @@ protocol ServiceFetcher: Sendable {
 enum UsageService {
     static func fetcher(for kind: ServiceKind) -> any ServiceFetcher {
         switch kind {
-        case .cursor: return CursorFetcher()
+        // xAI is derived from Cursor's snapshot; fetchAll never asks for it.
+        case .cursor, .xai: return CursorFetcher()
         case .grokBot: return GrokBotFetcher()
         case .codex: return CodexFetcher()
         case .claude: return ClaudeFetcher()
@@ -19,7 +20,7 @@ enum UsageService {
     /// Fetches the given (signed-in) services concurrently, merges into the shared
     /// cache, and returns the full cached dictionary.
     static func fetchAll(_ kinds: [ServiceKind] = ServiceKind.allCases) async -> [ServiceKind: ServiceSnapshot] {
-        let targets = kinds.filter { TokenStore.signedIn($0) }
+        let targets = kinds.filter { !$0.isDerived && TokenStore.signedIn($0) }
         guard !targets.isEmpty else { return SnapshotStore.loadAll() }
 
         let fresh = await withTaskGroup(of: ServiceSnapshot.self, returning: [ServiceSnapshot].self) { group in

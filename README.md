@@ -85,7 +85,10 @@ token is the part after `%3A%3A` (URL-encoded `::`).
   body `{"teamId":-1,"startDate":"<ms>","endDate":"<ms>"}`) as the sum of `totalCents` over
   `aggregations` whose `modelIntent` isn't grok/composer/auto/default/cursor, from
   `billingCycleStart` (or `currentPeriodStart`) to now. Omitted when unavailable. These
-  endpoints are untested against a live unified account.
+  endpoints are untested against a live unified account. Snapshots record `unified`, and the
+  app and widgets then show one **xAI** section (derived from the Cursor snapshot, never
+  fetched itself) in place of Cursor and Grok Bot. Widget pickers list xAI; saved Cursor /
+  Grok Bot choices resolve to it on unified accounts, and xAI falls back to Cursor otherwise.
 
 ### Codex (ChatGPT)
 

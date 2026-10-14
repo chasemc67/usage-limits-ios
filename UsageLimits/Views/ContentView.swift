@@ -25,7 +25,7 @@ struct ContentView: View {
 
                         VStack(alignment: .leading, spacing: 0) {
                             TerminalDivider()
-                            ForEach(ServiceKind.allCases) { kind in
+                            ForEach(model.sectionKinds) { kind in
                                 ServiceCard(kind: kind)
                                     .id(kind)
                             }
@@ -89,7 +89,7 @@ private struct TitleHeader: View {
             Spacer(minLength: 8)
 
             Menu {
-                ForEach(ServiceKind.allCases) { kind in
+                ForEach(model.sectionKinds) { kind in
                     Button {
                         model.sheetKind = kind
                     } label: {

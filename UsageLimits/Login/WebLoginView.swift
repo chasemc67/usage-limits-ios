@@ -252,7 +252,7 @@ enum WebSessionCleaner {
     static func clear(for kind: ServiceKind) {
         let domains: [String]
         switch kind {
-        case .cursor, .grokBot: domains = ["cursor.com", "cursor.sh", "workos"]
+        case .cursor, .grokBot, .xai: domains = ["cursor.com", "cursor.sh", "workos"]
         case .codex: domains = ["chatgpt.com", "openai.com"]
         case .claude: domains = ["claude.ai", "anthropic.com"]
         }

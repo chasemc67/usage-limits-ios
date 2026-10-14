@@ -65,7 +65,7 @@ enum TokenStore {
 
     static func signedIn(_ kind: ServiceKind) -> Bool {
         switch kind {
-        case .cursor, .grokBot:
+        case .cursor, .grokBot, .xai:
             return cursorSessionToken != nil
         case .codex:
             return codexAccessToken != nil || codexSessionCookie != nil
@@ -77,7 +77,7 @@ enum TokenStore {
     /// Clears every credential belonging to `kind`. Cursor and Grok Bot share one credential.
     static func signOut(_ kind: ServiceKind) {
         switch kind {
-        case .cursor, .grokBot:
+        case .cursor, .grokBot, .xai:
             cursorSessionToken = nil
         case .codex:
             codexAccessToken = nil

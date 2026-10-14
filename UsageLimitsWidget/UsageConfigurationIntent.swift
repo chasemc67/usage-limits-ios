@@ -7,6 +7,7 @@ enum ServiceChoice: String, AppEnum, CaseIterable {
     case grokBot
     case codex
     case claude
+    case xai
 
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Service"
 
@@ -16,8 +17,10 @@ enum ServiceChoice: String, AppEnum, CaseIterable {
         .grokBot: "Grok Bot",
         .codex: "Codex",
         .claude: "Claude",
+        .xai: "xAI",
     ]
 
+    /// Cursor, Grok Bot and xAI resolve to whichever section the account shows (`UsageEntry.section(for:)`).
     var kind: ServiceKind? {
         switch self {
         case .mostConstrained: return nil
@@ -25,6 +28,7 @@ enum ServiceChoice: String, AppEnum, CaseIterable {
         case .grokBot: return .grokBot
         case .codex: return .codex
         case .claude: return .claude
+        case .xai: return .xai
         }
     }
 }
@@ -35,6 +39,10 @@ enum ProviderChoice: String, AppEnum, CaseIterable {
     case cursor
     case grokBot
     case codex
+    /// Unified (X Subscription) accounts. An AppEnum can't hide cases per account (and moving to an
+    /// AppEntity would drop saved configurations), so every option stays listed and Cursor, Grok Bot
+    /// and xAI resolve to whichever section the account shows.
+    case xai
 
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Provider"
 
@@ -43,6 +51,7 @@ enum ProviderChoice: String, AppEnum, CaseIterable {
         .cursor: "Cursor",
         .grokBot: "Grok Bot",
         .codex: "Codex",
+        .xai: "xAI",
     ]
 
     var kind: ServiceKind {
@@ -51,6 +60,7 @@ enum ProviderChoice: String, AppEnum, CaseIterable {
         case .cursor: return .cursor
         case .grokBot: return .grokBot
         case .codex: return .codex
+        case .xai: return .xai
         }
     }
 }

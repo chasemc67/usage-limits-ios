@@ -90,7 +90,8 @@ struct CursorFetcher: ServiceFetcher {
                                    error: "No plan usage reported for this account")
         }
 
-        return ServiceSnapshot(kind: .cursor, windows: windows, extras: extras, fetchedAt: Date(), error: nil)
+        return ServiceSnapshot(kind: .cursor, windows: windows, extras: extras, fetchedAt: Date(), error: nil,
+                               unified: false)
     }
 
     // MARK: - Unified (X Subscription)
@@ -110,7 +111,7 @@ struct CursorFetcher: ServiceFetcher {
             status = json
         case .failure(let error):
             return ServiceSnapshot(kind: .cursor, windows: [], extras: extras, fetchedAt: Date(),
-                                   error: ServiceError.message(for: error))
+                                   error: ServiceError.message(for: error), unified: true)
         }
 
         let window = GrokBotFetcher.weeklyWindow(from: status, id: UnifiedPlan.cursorSharedWindowID,
@@ -123,7 +124,7 @@ struct CursorFetcher: ServiceFetcher {
         }
 
         return ServiceSnapshot(kind: .cursor, windows: [window], extras: extras, fetchedAt: Date(),
-                               error: nil, thirdPartyCents: thirdPartyCents)
+                               error: nil, thirdPartyCents: thirdPartyCents, unified: true)
     }
 
     // MARK: - Requests

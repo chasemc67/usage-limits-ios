@@ -124,7 +124,7 @@ struct ServiceSettingsSheet: View {
     private var signInSection: some View {
         Section {
             switch kind {
-            case .cursor, .grokBot:
+            case .cursor, .grokBot, .xai:
                 Button {
                     webLoginFlow = .cursor
                 } label: {
@@ -154,7 +154,7 @@ struct ServiceSettingsSheet: View {
             Text("Sign in")
         } footer: {
             switch kind {
-            case .cursor, .grokBot:
+            case .cursor, .grokBot, .xai:
                 Text("Opens cursor.com in a web view and captures the WorkosCursorSessionToken cookie.")
             case .codex:
                 Text("Opens chatgpt.com in a web view, then reads an access token from /api/auth/session.")
@@ -204,7 +204,7 @@ struct ServiceSettingsSheet: View {
     private var manualSection: some View {
         Section {
             switch kind {
-            case .cursor, .grokBot:
+            case .cursor, .grokBot, .xai:
                 SecureField("WorkosCursorSessionToken", text: $cursorToken)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -240,7 +240,7 @@ struct ServiceSettingsSheet: View {
             Text("Paste token manually")
         } footer: {
             switch kind {
-            case .cursor, .grokBot:
+            case .cursor, .grokBot, .xai:
                 Text("From cursor.com → DevTools → Application → Cookies → WorkosCursorSessionToken. A bare JWT also works.")
             case .codex:
                 Text("accessToken from chatgpt.com/api/auth/session. The session cookie is __Secure-next-auth.session-token.")

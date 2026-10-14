@@ -50,7 +50,8 @@ struct GrokBotFetcher: ServiceFetcher {
             extras.append("No usage available until reset")
         }
 
-        return ServiceSnapshot(kind: .grokBot, windows: [window], extras: extras, fetchedAt: Date(), error: nil)
+        return ServiceSnapshot(kind: .grokBot, windows: [window], extras: extras, fetchedAt: Date(), error: nil,
+                               unified: unified)
     }
 
     /// The weekly pool from a GetSandUsageStatus response. On unified accounts this is the

@@ -5,7 +5,7 @@ struct ServiceCard: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        let snapshot = model.snapshots[kind]
+        let snapshot = model.snapshot(kind)
         let signedIn = model.isSignedIn(kind)
 
         VStack(alignment: .leading, spacing: 12) {
@@ -102,7 +102,7 @@ struct ServiceCard: View {
 
     private var signInBlurb: String {
         switch kind {
-        case .cursor, .grokBot: return "One Cursor login covers Cursor and Grok Bot."
+        case .cursor, .grokBot, .xai: return "One Cursor login covers Cursor and Grok Bot."
         case .codex: return "Sign in with your ChatGPT account."
         case .claude: return "Sign in with your Claude account."
         }

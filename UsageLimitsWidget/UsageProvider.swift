@@ -106,13 +106,18 @@ struct FocusItem: Identifiable {
 }
 
 extension UsageEntry {
-    /// Services with data, in canonical order.
+    /// Sections with data, in display order (xAI replaces Cursor + Grok Bot on unified accounts).
     var available: [ServiceSnapshot] {
-        ServiceKind.allCases.compactMap { snapshots[$0] }.filter { !$0.windows.isEmpty }
+        UnifiedPlan.sectionKinds(snapshots).compactMap { snapshot(for: $0) }
+    }
+
+    /// The section that shows `kind`, so saved Cursor / Grok Bot choices land on xAI when unified.
+    func section(for kind: ServiceKind) -> ServiceKind {
+        UnifiedPlan.section(for: kind, in: snapshots)
     }
 
     private var candidateSnapshots: [ServiceSnapshot] {
-        if let kind = configuration.service.kind {
+        if let kind = configuration.service.kind.map(section(for:)) {
             return available.filter { $0.kind == kind }
         }
         return available
@@ -143,9 +148,9 @@ extension UsageEntry {
         }
     }
 
-    /// A provider's snapshot, if it has data.
+    /// A section's snapshot, if it has data.
     func snapshot(for kind: ServiceKind) -> ServiceSnapshot? {
-        guard let snapshot = snapshots[kind], !snapshot.windows.isEmpty else { return nil }
+        guard let snapshot = UnifiedPlan.sectionSnapshot(kind, in: snapshots), !snapshot.windows.isEmpty else { return nil }
         return snapshot
     }
 
@@ -160,10 +165,10 @@ extension UsageEntry {
         snapshots.values.map(\.fetchedAt).max()
     }
 
-    static func sample(provider: ProviderChoice = .claude) -> UsageEntry {
+    static func sample(provider: ProviderChoice = .claude, unified: Bool = false) -> UsageEntry {
         let now = Date()
         let day: TimeInterval = 86_400
-        let snapshots: [ServiceKind: ServiceSnapshot] = [
+        var snapshots: [ServiceKind: ServiceSnapshot] = [
             .cursor: ServiceSnapshot(kind: .cursor, windows: [
                 UsageWindow(id: "cursor.auto", label: "Cursor Models (Auto)", usedPercent: 1, resetsAt: now.addingTimeInterval(30 * day)),
                 UsageWindow(id: "cursor.api", label: "Other Models (API)", usedPercent: 39, resetsAt: now.addingTimeInterval(30 * day)),
@@ -181,6 +186,13 @@ extension UsageEntry {
                 UsageWindow(id: "claude.seven_day", label: "Weekly (all models)", usedPercent: 25, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800),
             ], extras: [], fetchedAt: now, error: nil),
         ]
+        if unified {
+            let shared = UsageWindow(id: UnifiedPlan.cursorSharedWindowID, label: UnifiedPlan.sharedWindowLabel,
+                                     usedPercent: 20, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800)
+            snapshots[.cursor] = ServiceSnapshot(kind: .cursor, windows: [shared], extras: ["Plan: Ultra"],
+                                                 fetchedAt: now, error: nil, thirdPartyCents: 1234, unified: true)
+            snapshots[.grokBot] = nil
+        }
         return UsageEntry(date: now, snapshots: snapshots, provider: provider)
     }
 }

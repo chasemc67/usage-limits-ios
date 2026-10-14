@@ -32,7 +32,7 @@ final class AppModel: ObservableObject {
         let s: [ServiceKind: ServiceSnapshot] = [
             .grokBot: ServiceSnapshot(kind: .grokBot, windows: [
                 UsageWindow(id: "grok.weekly", label: "Shared weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
-                extras: ["Plan: Ultra"], fetchedAt: now, error: nil),
+                extras: ["Plan: Ultra"], fetchedAt: now, error: nil, unified: true),
             .codex: ServiceSnapshot(kind: .codex, windows: [
                 UsageWindow(label: "Weekly", usedPercent: 0, resetsAt: now.addingTimeInterval(7*d), windowSeconds: 604_800)],
                 extras: ["Plan: Plus", "Credits: 100", "Reset credits available: 2"], fetchedAt: now, error: nil),
@@ -42,7 +42,7 @@ final class AppModel: ObservableObject {
                 extras: ["Extra usage: off"], fetchedAt: now, error: nil),
             .cursor: ServiceSnapshot(kind: .cursor, windows: [
                 UsageWindow(id: "cursor.shared", label: "Shared weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
-                extras: ["Plan: Ultra"], fetchedAt: now, error: nil, thirdPartyCents: 1234),
+                extras: ["Plan: Ultra"], fetchedAt: now, error: nil, thirdPartyCents: 1234, unified: true),
         ]
         SnapshotStore.saveAll(s)
         snapshots = s
@@ -60,9 +60,19 @@ final class AppModel: ObservableObject {
 
     var anySignedIn: Bool { signedIn.values.contains(true) }
 
-    func isSignedIn(_ kind: ServiceKind) -> Bool { signedIn[kind] ?? false }
+    /// Cards and settings in display order (xAI replaces Cursor + Grok Bot on unified accounts).
+    var sectionKinds: [ServiceKind] { UnifiedPlan.sectionKinds(snapshots) }
 
-    func isRefreshing(_ kind: ServiceKind) -> Bool { refreshing.contains(kind) }
+    func snapshot(_ kind: ServiceKind) -> ServiceSnapshot? {
+        UnifiedPlan.sectionSnapshot(kind, in: snapshots)
+    }
+
+    /// xAI uses the shared Cursor credential.
+    func isSignedIn(_ kind: ServiceKind) -> Bool { signedIn[kind.credentialGroup[0]] ?? false }
+
+    func isRefreshing(_ kind: ServiceKind) -> Bool {
+        kind.isDerived ? !refreshing.isDisjoint(with: kind.credentialGroup) : refreshing.contains(kind)
+    }
 
     func reloadAuthState() {
         var state: [ServiceKind: Bool] = [:]

@@ -6,6 +6,15 @@ enum ServiceKind: String, CaseIterable, Codable, Sendable, Hashable, Identifiabl
     case grokBot
     case codex
     case claude
+    /// Derived section for unified (X Subscription) accounts: Cursor + Grok Bot in one card.
+    /// Never fetched or signed into itself; built from the Cursor snapshot (see UnifiedPlan).
+    case xai
+
+    /// Fetched services only, so fetch, sign-in and settings loops never touch `.xai`.
+    /// Display order comes from `UnifiedPlan.sectionKinds`.
+    static var allCases: [ServiceKind] { [.cursor, .grokBot, .codex, .claude] }
+
+    var isDerived: Bool { self == .xai }
 
     var id: String { rawValue }
 
@@ -15,6 +24,7 @@ enum ServiceKind: String, CaseIterable, Codable, Sendable, Hashable, Identifiabl
         case .grokBot: return "Grok Bot"
         case .codex: return "Codex"
         case .claude: return "Claude"
+        case .xai: return "xAI"
         }
     }
 
@@ -25,6 +35,7 @@ enum ServiceKind: String, CaseIterable, Codable, Sendable, Hashable, Identifiabl
         case .grokBot: return "LogoGrok"
         case .codex: return "LogoOpenAI"
         case .claude: return "LogoClaude"
+        case .xai: return "LogoXAI"
         }
     }
 
@@ -34,13 +45,14 @@ enum ServiceKind: String, CaseIterable, Codable, Sendable, Hashable, Identifiabl
         case .grokBot: return Color(red: 0.10, green: 0.68, blue: 0.82)
         case .codex: return Color(red: 0.06, green: 0.64, blue: 0.50)
         case .claude: return Color(red: 0.85, green: 0.47, blue: 0.34)
+        case .xai: return Color(red: 0.10, green: 0.68, blue: 0.82)
         }
     }
 
     /// Services that share one stored credential with this one (Cursor + Grok Bot).
     var credentialGroup: [ServiceKind] {
         switch self {
-        case .cursor, .grokBot: return [.cursor, .grokBot]
+        case .cursor, .grokBot, .xai: return [.cursor, .grokBot]
         case .codex: return [.codex]
         case .claude: return [.claude]
         }
@@ -82,6 +94,8 @@ struct ServiceSnapshot: Codable, Sendable, Hashable, Identifiable {
     /// Cursor (X Subscription): spend on third-party models at API rates this billing cycle.
     /// Optional with a default so snapshots cached by older builds still decode.
     var thirdPartyCents: Double? = nil
+    /// Cursor / Grok Bot: whether the account is unified (X Subscription). Optional for the same reason.
+    var unified: Bool? = nil
 
     var id: ServiceKind { kind }
 

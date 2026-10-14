@@ -45,12 +45,10 @@ struct UseItNudge: Identifiable, Hashable {
                        now: Date,
                        config: ResetAlertConfig = .standard) -> [UseItNudge] {
         var result: [UseItNudge] = []
-        for kind in ServiceKind.allCases where isSignedIn(kind) {
-            guard let snapshot = snapshots[kind] else { continue }
+        // Per section, so a unified account's shared pool is flagged once, as xAI.
+        for kind in UnifiedPlan.sectionKinds(snapshots) where isSignedIn(kind) {
+            guard let snapshot = UnifiedPlan.sectionSnapshot(kind, in: snapshots) else { continue }
             for window in snapshot.windows {
-                // Cursor's shared pool mirrors Grok Bot's on unified accounts; flag it once.
-                if window.id == UnifiedPlan.cursorSharedWindowID, isSignedIn(.grokBot),
-                   snapshots[.grokBot]?.windows.isEmpty == false { continue }
                 guard let resetsAt = window.resetsAt,
                       let leadTime = config.leadTime(for: ResetWindowKind.infer(window, service: kind, config: config))
                 else { continue }
