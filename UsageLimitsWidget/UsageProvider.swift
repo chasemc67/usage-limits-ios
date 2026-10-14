@@ -178,17 +178,18 @@ extension UsageEntry {
                 UsageWindow(id: "grok.weekly", label: "Weekly", usedPercent: 21, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800),
             ], extras: [], fetchedAt: now, error: nil),
             .codex: ServiceSnapshot(kind: .codex, windows: [
-                UsageWindow(id: "codex.secondary_window", label: "Weekly", usedPercent: 26, resetsAt: now.addingTimeInterval(6 * day), windowSeconds: 604_800),
+                UsageWindow(id: "codex.secondary_window", label: "Weekly", usedPercent: 70, resetsAt: now.addingTimeInterval(6 * day), windowSeconds: 604_800),
             ], extras: [], fetchedAt: now, error: nil),
             .claude: ServiceSnapshot(kind: .claude, windows: [
-                // Inside the 1h five-hour lead time with 63% left, so the large widget shows its banner.
-                UsageWindow(id: "claude.five_hour", label: "5-hour", usedPercent: 37, resetsAt: now.addingTimeInterval(58 * 60), windowSeconds: 18_000),
-                UsageWindow(id: "claude.seven_day", label: "Weekly (all models)", usedPercent: 25, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800),
+                // Inside the 1h five-hour lead time with 84% left, so the large widget shows its banner.
+                UsageWindow(id: "claude.five_hour", label: "5-hour", usedPercent: 16, resetsAt: now.addingTimeInterval(58 * 60), windowSeconds: 18_000),
+                UsageWindow(id: "claude.seven_day", label: "Weekly (all models)", usedPercent: 83, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800),
+                UsageWindow(id: "claude.weekly_scoped.fable", label: "Weekly (Fable only)", usedPercent: 0, resetsAt: now.addingTimeInterval(5 * day), windowSeconds: 604_800),
             ], extras: [], fetchedAt: now, error: nil),
         ]
         if unified {
             let shared = UsageWindow(id: UnifiedPlan.cursorSharedWindowID, label: UnifiedPlan.sharedWindowLabel,
-                                     usedPercent: 20, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800)
+                                     usedPercent: 17, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800)
             snapshots[.cursor] = ServiceSnapshot(kind: .cursor, windows: [shared], extras: ["Plan: Ultra"],
                                                  fetchedAt: now, error: nil, thirdPartyCents: 1234,
                                                  thirdPartySince: Calendar.current.dateInterval(of: .month, for: now)?.start,

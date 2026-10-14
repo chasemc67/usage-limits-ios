@@ -55,3 +55,27 @@ struct UsageOverviewWidget: Widget {
         .supportedFamilies([.systemMedium, .systemLarge])
     }
 }
+
+#Preview(as: .systemSmall) {
+    UsageProviderWidget()
+} timeline: {
+    UsageEntry.sample(provider: .claude)
+    UsageEntry.sample(provider: .cursor)
+    UsageEntry.sample(provider: .grokBot)
+    UsageEntry.sample(provider: .codex)
+    UsageEntry.sample(provider: .xai, unified: true)
+}
+
+#Preview(as: .systemMedium) {
+    UsageOverviewWidget()
+} timeline: {
+    UsageEntry.sample()
+    UsageEntry.sample(unified: true)
+}
+
+#Preview(as: .systemLarge) {
+    UsageOverviewWidget()
+} timeline: {
+    UsageEntry.sample()
+    UsageEntry.sample(unified: true)
+}

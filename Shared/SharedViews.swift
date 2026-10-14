@@ -16,13 +16,20 @@ struct UsageBar: View {
     }
 }
 
+/// Anchor for the asset catalog compiled with this source (app, widget, or tests).
+private final class TMXBundleToken {}
+
+extension Bundle {
+    static var tmxResources: Bundle { Bundle(for: TMXBundleToken.self) }
+}
+
 /// Bare orange provider logo.
 struct ProviderLogo: View {
     var kind: ServiceKind
     var size: CGFloat = 28
 
     var body: some View {
-        Image(kind.logoAssetName)
+        Image(kind.logoAssetName, bundle: .tmxResources)
             .renderingMode(.template)
             .resizable()
             .scaledToFit()

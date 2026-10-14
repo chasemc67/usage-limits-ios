@@ -81,8 +81,15 @@ struct ClaudeFetcher: ServiceFetcher {
             ("seven_day_sonnet", "Weekly Sonnet", 604_800),
         ]
 
+        // Model-scoped weekly pools live in `limits[]` now. Prefer those over a legacy
+        // seven_day_<model> bucket for the same model.
+        let limits = json["limits"].array ?? []
+        let scoped = weeklyScopedWindows(in: limits)
+        let scopedModels = Set(scoped.map { modelSlug(fromWindowID: $0.id) })
+
         var windows: [UsageWindow] = []
         for bucket in buckets {
+            if let model = legacyModelSlug(bucket.key), scopedModels.contains(model) { continue }
             let value = json[bucket.key]
             guard value.object != nil else { continue }
             windows.append(UsageWindow(id: "claude.\(bucket.key)",
@@ -91,6 +98,25 @@ struct ClaudeFetcher: ServiceFetcher {
                                        resetsAt: value["resets_at"].date,
                                        windowSeconds: bucket.seconds))
         }
+
+        if !windows.contains(where: { $0.id == "claude.five_hour" }),
+           let session = limitWindow(in: limits, kind: "session", id: "claude.five_hour",
+                                    label: "5-hour", seconds: 18_000) {
+            windows.insert(session, at: 0)
+        }
+        if !windows.contains(where: { $0.id == "claude.seven_day" }),
+           let weekly = limitWindow(in: limits, kind: "weekly_all", id: "claude.seven_day",
+                                   label: "Weekly (all models)", seconds: 604_800) {
+            let index = windows.firstIndex(where: { $0.id == "claude.five_hour" }).map { $0 + 1 } ?? 0
+            windows.insert(weekly, at: index)
+        }
+
+        let primary: Set<String> = ["claude.five_hour", "claude.seven_day"]
+        var insertAt = 0
+        while insertAt < windows.count, primary.contains(windows[insertAt].id) {
+            insertAt += 1
+        }
+        windows.insert(contentsOf: scoped, at: insertAt)
 
         var extras: [String] = []
         let extra = json["extra_usage"]
@@ -110,6 +136,63 @@ struct ClaudeFetcher: ServiceFetcher {
 
         return ServiceSnapshot(kind: .claude, windows: windows, extras: extras, fetchedAt: Date(),
                                error: windows.isEmpty ? "No usage buckets reported" : nil)
+    }
+
+    /// Active `weekly_scoped` rows. `is_active` omitted means active. Rows with no display name are skipped.
+    private static func weeklyScopedWindows(in limits: [JSONValue]) -> [UsageWindow] {
+        var windows: [UsageWindow] = []
+        for entry in limits {
+            guard entry.object != nil, entry["kind"].string == "weekly_scoped", isActive(entry) else { continue }
+            guard let name = entry["scope"]["model"]["display_name"].nonEmptyString else { continue }
+            let slug = modelSlug(name)
+            guard !slug.isEmpty else { continue }
+            windows.append(UsageWindow(id: "claude.weekly_scoped.\(slug)",
+                                       label: "Weekly (\(name) only)",
+                                       usedPercent: entry["percent"].double ?? 0,
+                                       resetsAt: entry["resets_at"].date,
+                                       windowSeconds: 604_800))
+        }
+        return windows
+    }
+
+    /// First active `limits[]` row of `kind`, used when the legacy object is absent.
+    private static func limitWindow(in limits: [JSONValue], kind: String, id: String,
+                                   label: String, seconds: Int) -> UsageWindow? {
+        for entry in limits {
+            guard entry.object != nil, entry["kind"].string == kind, isActive(entry) else { continue }
+            return UsageWindow(id: id, label: label,
+                               usedPercent: entry["percent"].double ?? 0,
+                               resetsAt: entry["resets_at"].date,
+                               windowSeconds: seconds)
+        }
+        return nil
+    }
+
+    /// Absent `is_active` is active. Only an explicit false drops the row.
+    private static func isActive(_ entry: JSONValue) -> Bool {
+        entry["is_active"].bool != false
+    }
+
+    /// Lowercased display name; every non-alphanumeric becomes "_".
+    private static func modelSlug(_ displayName: String) -> String {
+        String(displayName.lowercased().map { character in
+            if character.isASCII, character.isLetter || character.isNumber { return character }
+            return "_"
+        })
+    }
+
+    private static func modelSlug(fromWindowID id: String) -> String {
+        let prefix = "claude.weekly_scoped."
+        guard id.hasPrefix(prefix) else { return "" }
+        return String(id.dropFirst(prefix.count))
+    }
+
+    /// "seven_day_opus" -> "opus". The plain seven_day bucket is not model-scoped.
+    private static func legacyModelSlug(_ key: String) -> String? {
+        let prefix = "seven_day_"
+        guard key.hasPrefix(prefix) else { return nil }
+        let model = String(key.dropFirst(prefix.count))
+        return model.isEmpty ? nil : model
     }
 }
 

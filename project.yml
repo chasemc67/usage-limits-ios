@@ -95,13 +95,17 @@ targets:
         ENABLE_PREVIEWS: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
 
-  # Logic tests: compiles Shared directly (no host app), so only pure parsing/detection is exercised.
+  # Logic tests: compiles Shared directly (no host app). Widget views are compiled in
+  # too (minus the @main bundle) so snapshot tests can render MediumWidgetView.
   UsageLimitsTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: UsageLimitsTests
       - path: Shared
+      - path: UsageLimitsWidget
+        excludes:
+          - UsageLimitsWidgetBundle.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.AnomalousResearch.UsageLimitsTests
@@ -120,6 +124,10 @@ schemes:
       config: Debug
       targets:
         - UsageLimitsTests
+      environmentVariables:
+        - variable: TMX_SHOT_DIR
+          value: /Users/chase-mini/dev/tmx-shots
+          isEnabled: true
     profile:
       config: Release
     analyze:

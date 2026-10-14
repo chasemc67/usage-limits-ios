@@ -31,17 +31,18 @@ final class AppModel: ObservableObject {
         let d: Double = 86_400
         let s: [ServiceKind: ServiceSnapshot] = [
             .grokBot: ServiceSnapshot(kind: .grokBot, windows: [
-                UsageWindow(id: "grok.weekly", label: "Shared weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
+                UsageWindow(id: "grok.weekly", label: "Shared weekly", usedPercent: 17, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
                 extras: ["Plan: Ultra"], fetchedAt: now, error: nil, unified: true),
             .codex: ServiceSnapshot(kind: .codex, windows: [
-                UsageWindow(label: "Weekly", usedPercent: 0, resetsAt: now.addingTimeInterval(7*d), windowSeconds: 604_800)],
+                UsageWindow(label: "Weekly", usedPercent: 70, resetsAt: now.addingTimeInterval(7*d), windowSeconds: 604_800)],
                 extras: ["Plan: Plus", "Credits: 100", "Reset credits available: 2"], fetchedAt: now, error: nil),
             .claude: ServiceSnapshot(kind: .claude, windows: [
-                UsageWindow(label: "5-hour", usedPercent: 25, resetsAt: now.addingTimeInterval(42*60), windowSeconds: 18_000),
-                UsageWindow(label: "Weekly (all models)", usedPercent: 24, resetsAt: now.addingTimeInterval(3*d + 19*3600), windowSeconds: 604_800)],
+                UsageWindow(id: "claude.five_hour", label: "5-hour", usedPercent: 16, resetsAt: now.addingTimeInterval(42*60), windowSeconds: 18_000),
+                UsageWindow(id: "claude.seven_day", label: "Weekly (all models)", usedPercent: 83, resetsAt: now.addingTimeInterval(3*d + 19*3600), windowSeconds: 604_800),
+                UsageWindow(id: "claude.weekly_scoped.fable", label: "Weekly (Fable only)", usedPercent: 0, resetsAt: now.addingTimeInterval(5*d), windowSeconds: 604_800)],
                 extras: ["Extra usage: off"], fetchedAt: now, error: nil),
             .cursor: ServiceSnapshot(kind: .cursor, windows: [
-                UsageWindow(id: "cursor.shared", label: "Shared weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
+                UsageWindow(id: "cursor.shared", label: "Shared weekly", usedPercent: 17, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
                 extras: ["Plan: Ultra"], fetchedAt: now, error: nil, thirdPartyCents: 1234,
                 thirdPartySince: Calendar.current.dateInterval(of: .month, for: now)?.start, unified: true),
         ]

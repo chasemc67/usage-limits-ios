@@ -74,6 +74,27 @@ private extension UsageWindow {
         guard full.hasSuffix(")"), let open = full.range(of: " (") else { return full }
         return String(full[..<open.lowerBound])
     }
+
+    /// Medium-widget names. "Weekly (Fable only)" -> "fable"; other labels keep `shortLabel`.
+    var mediumLabel: String {
+        let full = label.lowercased()
+        switch full {
+        case "5-hour":
+            return "5h"
+        case "weekly (all models)", "shared weekly":
+            return "weekly"
+        default:
+            break
+        }
+        let prefix = "weekly ("
+        let suffix = " only)"
+        if full.hasPrefix(prefix), full.hasSuffix(suffix) {
+            let start = full.index(full.startIndex, offsetBy: prefix.count)
+            let end = full.index(full.endIndex, offsetBy: -suffix.count)
+            if start < end { return String(full[start..<end]) }
+        }
+        return shortLabel
+    }
 }
 
 /// Bar with a fixed number of segments. The last lit segment fills in ⅛ steps,
@@ -370,195 +391,280 @@ private struct SmallPoolRow: View {
     }
 }
 
-// MARK: - System Medium (M2b: weighted columns)
+// MARK: - System Medium (equal columns: Claude | xAI + Codex)
 
-private struct MediumWidgetView: View {
+struct MediumWidgetView: View {
     let entry: UsageEntry
 
     var body: some View {
-        if entry.available.isEmpty {
-            EmptyWidgetView()
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                WidgetHeader(command: "tmx grid · % used",
-                             trailing: updatedText(entry.lastUpdated, now: entry.date))
-                GeometryReader { proxy in
-                    let gap: CGFloat = 5
-                    // 195 : 132, as in the mockup.
-                    let wide = ((proxy.size.width - gap) * 195 / 327).rounded()
-                    // Unified accounts: one xAI cell for Cursor + Grok Bot; Codex takes the full column.
-                    let unified = UnifiedPlan.isUnified(entry.snapshots)
-                    HStack(spacing: gap) {
-                        VStack(spacing: gap) {
-                            MediumCell(entry: entry, kind: .claude, wide: true)
-                            MediumCell(entry: entry, kind: unified ? .xai : .cursor, wide: true)
-                        }
-                        .frame(width: wide)
-                        VStack(spacing: gap) {
-                            MediumCell(entry: entry, kind: .codex, wide: false)
-                            if !unified {
-                                MediumCell(entry: entry, kind: .grokBot, wide: false)
-                            }
-                        }
+        Group {
+            if entry.available.isEmpty {
+                EmptyWidgetView()
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    WidgetHeader(command: "tmx grid · % used",
+                                 trailing: updatedText(entry.lastUpdated, now: entry.date))
+                    columns
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var columns: some View {
+        let unified = UnifiedPlan.isUnified(entry.snapshots)
+        return HStack(alignment: .top, spacing: 4) {
+            MediumCell(entry: entry, kind: .claude, mode: .primary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Group {
+                if unified {
+                    VStack(spacing: 4) {
+                        MediumCell(entry: entry, kind: .xai, mode: .half)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        MediumCell(entry: entry, kind: .codex, mode: .half)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                } else {
+                    MediumClassicColumn(entry: entry)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+/// Cursor, Grok Bot and Codex share the right column when the account is not unified.
+/// A one-pool cell stays short; Cursor's extra pools take the remaining height.
+private struct MediumClassicColumn: View {
+    let entry: UsageEntry
+
+    private var kinds: [ServiceKind] { [.cursor, .grokBot, .codex] }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let gap: CGFloat = 3
+            let heights = rowHeights(total: proxy.size.height, gap: gap)
+            VStack(spacing: gap) {
+                ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
+                    MediumCell(entry: entry, kind: kind, mode: .compact)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: heights[index])
                 }
             }
         }
     }
+
+    private func rowHeights(total: CGFloat, gap: CGFloat) -> [CGFloat] {
+        let counts = kinds.map { max(entry.snapshot(for: $0)?.windows.count ?? 1, 1) }
+        let available = max(0, total - gap * CGFloat(max(kinds.count - 1, 0)))
+        let preferred = counts.map { count -> CGFloat in
+            count <= 1 ? 32 : 14 + 12 * CGFloat(count)
+        }
+        let sum = preferred.reduce(0, +)
+        guard sum > 0 else {
+            return Array(repeating: available / CGFloat(max(kinds.count, 1)), count: kinds.count)
+        }
+        if sum <= available {
+            let extra = available - sum
+            return preferred.map { $0 + extra / CGFloat(preferred.count) }
+        }
+        return preferred.map { available * $0 / sum }
+    }
+}
+
+private enum MediumCellMode {
+    /// Full-height Claude column.
+    case primary
+    /// Half-height cell in the unified right column (xAI, Codex).
+    case half
+    /// Shorter cell in the non-unified stack.
+    case compact
 }
 
 private struct MediumCell: View {
     let entry: UsageEntry
     let kind: ServiceKind
-    let wide: Bool
+    let mode: MediumCellMode
+
+    private var snapshot: ServiceSnapshot? { entry.snapshot(for: kind) }
+    private var windows: [UsageWindow] { snapshot?.windows ?? [] }
 
     var body: some View {
-        let snapshot = entry.snapshot(for: kind)
-        let windows = snapshot?.windows ?? []
-
-        VStack(alignment: .leading, spacing: 0) {
-            header(windows: windows)
-
+        VStack(alignment: .leading, spacing: mode == .compact ? 1 : 2) {
+            if mode == .primary || windows.count != 1 {
+                headerRow
+            }
             if windows.isEmpty {
-                Text((UnifiedPlan.sectionSnapshot(kind, in: entry.snapshots)?.error ?? "not signed in").lowercased())
+                Text(emptyMessage)
                     .font(TMX.font(size: 9))
                     .foregroundStyle(TMX.dim)
                     .lineLimit(2)
-                    .padding(.top, 3)
-            } else if windows.count == 1 && !wide {
-                bigNumber(windows[0])
-            } else if windows.count <= 2 {
-                ForEach(windows) { window in
-                    twoLinePool(window)
-                }
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            } else if mode == .primary {
+                primaryPools
+            } else if windows.count == 1, let window = windows.first {
+                singlePool(window)
             } else {
-                ViewThatFits(in: .horizontal) {
-                    oneLineRows(windows, short: false, scales: false)
-                    oneLineRows(windows, short: true, scales: false)
-                    oneLineRows(windows, short: true, scales: true)
-                }
+                stackedPools
             }
-            if let cents = snapshot?.thirdPartyCents {
-                thirdPartyLine(cents, since: snapshot?.thirdPartySince)
-            }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
+        .padding(.horizontal, 6)
+        .padding(.vertical, mode == .primary ? 4 : 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .overlay(Rectangle().strokeBorder(TMX.faint, lineWidth: 1))
         .clipped()
     }
 
-    @ViewBuilder
-    private func header(windows: [UsageWindow]) -> some View {
-        // Narrow single-pool cells carry their reset under the number, so the header is just the name.
-        let count: String? = switch windows.count {
-        case 0: nil
-        case 1: wide ? "1 pool" : nil
-        default: "\(windows.count) pools"
-        }
-        ViewThatFits(in: .horizontal) {
-            headerLine(count: count)
-            headerLine(count: nil)
-        }
-        .frame(height: 13)
+    private var emptyMessage: String {
+        (UnifiedPlan.sectionSnapshot(kind, in: entry.snapshots)?.error ?? "not signed in").lowercased()
     }
 
-    private func headerLine(count: String?) -> some View {
-        HStack(spacing: 5) {
+    private var headerRow: some View {
+        HStack(spacing: 4) {
             ProviderLogo(kind: kind, size: 12)
                 .widgetAccentable()
             Text(kind.displayName.lowercased())
                 .font(TMX.font(size: 9.5, weight: .bold))
                 .foregroundStyle(TMX.hi)
-                .minimumScaleFactor(0.7)
+                .fixedSize()
+                .layoutPriority(1)
             Spacer(minLength: 4)
-            if let count {
-                Text(count)
+            if mode == .primary, windows.count > 1 {
+                Text("\(windows.count) pools")
                     .font(TMX.font(size: 9))
                     .foregroundStyle(TMX.dim)
                     .fixedSize()
             }
         }
         .lineLimit(1)
+        .frame(height: 13)
     }
 
-    /// Narrow single-pool cell: big number beside label and reset, full-width bar.
-    private func bigNumber(_ window: UsageWindow) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .center, spacing: 5) {
-                Text(Fmt.percent(window.usedPercent))
-                    .font(TMX.font(size: 22, weight: .bold))
-                    .tracking(-1)
-                    .foregroundStyle(UsageColor.color(for: window.usedPercent))
-                    .widgetAccentable()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .layoutPriority(1)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(window.label.lowercased())
-                        .foregroundStyle(TMX.fg)
-                        .minimumScaleFactor(0.6)
-                    if let resetsAt = window.resetsAt {
-                        (Text("resets ").foregroundStyle(TMX.dim)
-                         + Text(Fmt.compactCountdown(to: resetsAt, now: entry.date))
-                            .fontWeight(.bold)
-                            .foregroundStyle(TMX.resetIsSoon(window, kind: kind, now: entry.date) ? TMX.amber : TMX.fg))
-                            .minimumScaleFactor(0.6)
-                    } else {
-                        Text("used")
-                            .foregroundStyle(TMX.dim)
-                    }
-                }
-                .font(TMX.font(size: 9))
-                .lineLimit(1)
-                Spacer(minLength: 0)
+    /// Three Claude pools, each label + reset over a bar + percent, sharing the column.
+    private var primaryPools: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(windows) { window in
+                twoLinePool(window, segments: 16, barHeight: 6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
-            PartialSegmentBar(usedPercent: window.usedPercent, segments: 20, height: 6)
+            thirdPartyBlock
         }
     }
 
-    /// "label · reset" over "bar · %".
-    private func twoLinePool(_ window: UsageWindow) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            ViewThatFits(in: .horizontal) {
-                twoLinePoolLabel(window, label: window.label.lowercased(), scales: false)
-                twoLinePoolLabel(window, label: window.shortLabel, scales: false)
-                twoLinePoolLabel(window, label: window.shortLabel, scales: true)
-            }
-            HStack(spacing: 5) {
-                PartialSegmentBar(usedPercent: window.usedPercent, segments: wide ? 24 : 14, height: 6)
-                Text(Fmt.percent(window.usedPercent))
+    /// "name · label    reset" over "bar · %", with the 3P line under xAI.
+    private func singlePool(_ window: UsageWindow) -> some View {
+        VStack(alignment: .leading, spacing: mode == .compact ? 2 : 3) {
+            HStack(spacing: 3) {
+                ProviderLogo(kind: kind, size: 12)
+                    .widgetAccentable()
+                Text(kind.displayName.lowercased())
                     .font(TMX.font(size: 9.5, weight: .bold))
                     .foregroundStyle(TMX.hi)
-                    .lineLimit(1)
                     .fixedSize()
-                    .frame(minWidth: 22, alignment: .trailing)
+                Text("·")
+                    .font(TMX.font(size: 9))
+                    .foregroundStyle(TMX.dim)
+                Text(window.mediumLabel)
+                    .font(TMX.font(size: 9.5))
+                    .foregroundStyle(TMX.fg)
+                    .fixedSize()
+                    .layoutPriority(1)
+                Spacer(minLength: 3)
+                resetLabel(window, size: 9.5)
             }
+            .lineLimit(1)
+            barLine(window, segments: mode == .compact ? 12 : 14, height: 6)
+            thirdPartyBlock
         }
-        .padding(.top, 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
-    private func twoLinePoolLabel(_ window: UsageWindow, label: String, scales: Bool) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .foregroundStyle(TMX.fg)
-                .minimumScaleFactor(scales ? 0.6 : 1)
-                .fixedSize(horizontal: !scales, vertical: false)
-            Spacer(minLength: 4)
-            if let resetsAt = window.resetsAt {
-                Text(Fmt.compactCountdown(to: resetsAt, now: entry.date))
-                    .foregroundStyle(TMX.resetColor(window, kind: kind, now: entry.date))
-                    .fixedSize()
+    /// Multi-pool compact cell: one row each. Bars stay only when every label still fits.
+    private var stackedPools: some View {
+        ViewThatFits(in: .horizontal) {
+            poolRows(showBar: true)
+            poolRows(showBar: false)
+        }
+    }
+
+    private func poolRows(showBar: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(windows) { window in
+                oneLine(window, showBar: showBar)
             }
+            thirdPartyBlock
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func twoLinePool(_ window: UsageWindow, segments: Int, barHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text(window.mediumLabel)
+                    .foregroundStyle(TMX.fg)
+                    .fixedSize()
+                    .layoutPriority(1)
+                Spacer(minLength: 4)
+                resetLabel(window, size: 9.5)
+            }
+            .font(TMX.font(size: 9.5))
+            .lineLimit(1)
+            barLine(window, segments: segments, height: barHeight)
+        }
+    }
+
+    private func barLine(_ window: UsageWindow, segments: Int, height: CGFloat) -> some View {
+        HStack(spacing: 4) {
+            PartialSegmentBar(usedPercent: window.usedPercent, segments: segments, height: height)
+            Text(Fmt.percent(window.usedPercent))
+                .font(TMX.font(size: 10, weight: .bold))
+                .foregroundStyle(TMX.hi)
+                .fixedSize()
+                .frame(minWidth: 28, alignment: .trailing)
+        }
+    }
+
+    private func oneLine(_ window: UsageWindow, showBar: Bool) -> some View {
+        HStack(spacing: 3) {
+            Text(window.mediumLabel)
+                .foregroundStyle(TMX.fg)
+                .fixedSize()
+                .layoutPriority(2)
+            if showBar {
+                PartialSegmentBar(usedPercent: window.usedPercent, segments: 10, height: 6)
+                    .frame(minWidth: 16, idealWidth: 28, maxWidth: .infinity)
+            } else {
+                Spacer(minLength: 4)
+            }
+            Text(Fmt.percent(window.usedPercent))
+                .fontWeight(.bold)
+                .foregroundStyle(TMX.hi)
+                .fixedSize()
+                .frame(minWidth: 26, alignment: .trailing)
+            resetLabel(window, size: 9)
+                .frame(minWidth: 22, alignment: .trailing)
         }
         .font(TMX.font(size: 9))
         .lineLimit(1)
+        .frame(height: 12)
     }
 
-    /// "3p api  $12.34 since 10/1": third-party model spend at API rates.
-    /// Drops the "since" part rather than squeezing the amount when the cell is narrow.
+    private func resetLabel(_ window: UsageWindow, size: CGFloat) -> some View {
+        Text(window.resetsAt.map { Fmt.compactCountdown(to: $0, now: entry.date) } ?? "")
+            .font(TMX.font(size: size, weight: .bold))
+            .foregroundStyle(TMX.resetColor(window, kind: kind, now: entry.date))
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var thirdPartyBlock: some View {
+        if let cents = snapshot?.thirdPartyCents {
+            thirdPartyLine(cents, since: snapshot?.thirdPartySince)
+        }
+    }
+
+    /// "3p api  $12.34 since 10/1". Drops "since …" rather than truncating the amount.
     private func thirdPartyLine(_ cents: Double, since: Date?) -> some View {
         ViewThatFits(in: .horizontal) {
             if let since {
@@ -568,15 +674,15 @@ private struct MediumCell: View {
         }
         .font(TMX.font(size: 9))
         .lineLimit(1)
-        .minimumScaleFactor(0.7)
         .frame(height: 12)
-        .padding(.top, 2)
+        .padding(.top, 1)
     }
 
     private func thirdPartyLineContent(_ cents: Double, since: Date?) -> some View {
         HStack(spacing: 4) {
             Text("3p api")
                 .foregroundStyle(TMX.fg)
+                .fixedSize()
             Spacer(minLength: 4)
             Text(Money.dollars(cents: cents))
                 .fontWeight(.bold)
@@ -586,44 +692,6 @@ private struct MediumCell: View {
                 Text("since \(Fmt.numericMonthDay(since))")
                     .foregroundStyle(TMX.dim)
                     .fixedSize()
-            }
-        }
-    }
-
-    /// One row per pool: label · bar · % · reset (narrow cells drop the bar).
-    /// `scales` is the last resort: labels shrink instead of overflowing.
-    private func oneLineRows(_ windows: [UsageWindow], short: Bool, scales: Bool) -> some View {
-        let labels = windows.map { short ? $0.shortLabel : $0.label.lowercased() }
-        let labelWidth = scales ? 0 : labels.map { monoWidth($0.count, size: 9) }.max() ?? 0
-        return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(windows.enumerated()), id: \.element.id) { index, window in
-                HStack(spacing: 3) {
-                    Text(labels[index])
-                        .foregroundStyle(TMX.fg)
-                        .minimumScaleFactor(scales ? 0.6 : 1)
-                        .fixedSize(horizontal: !scales, vertical: false)
-                        .frame(minWidth: labelWidth, alignment: .leading)
-                        .layoutPriority(scales ? 1 : 0)
-                    if wide {
-                        PartialSegmentBar(usedPercent: window.usedPercent, segments: 16, height: 6)
-                            .frame(minWidth: scales ? 0 : 16, idealWidth: 40, maxWidth: .infinity)
-                    } else {
-                        Spacer(minLength: 3)
-                    }
-                    Text(Fmt.percent(window.usedPercent))
-                        .fontWeight(.bold)
-                        .foregroundStyle(TMX.hi)
-                        .fixedSize()
-                        .frame(minWidth: 18, alignment: .trailing)
-                    Text(window.resetsAt.map { Fmt.compactCountdown(to: $0, now: entry.date) } ?? "")
-                        .foregroundStyle(TMX.resetColor(window, kind: kind, now: entry.date))
-                        .fixedSize()
-                        .frame(minWidth: 16, alignment: .trailing)
-                }
-                .font(TMX.font(size: 9))
-                .lineLimit(1)
-                .frame(height: windows.count > 3 ? 12 : 13)
-                .padding(.top, 1)
             }
         }
     }
@@ -962,26 +1030,3 @@ private struct InlineAccessoryView: View {
     }
 }
 
-#Preview(as: .systemSmall) {
-    UsageProviderWidget()
-} timeline: {
-    UsageEntry.sample(provider: .claude)
-    UsageEntry.sample(provider: .cursor)
-    UsageEntry.sample(provider: .grokBot)
-    UsageEntry.sample(provider: .codex)
-    UsageEntry.sample(provider: .xai, unified: true)
-}
-
-#Preview(as: .systemMedium) {
-    UsageOverviewWidget()
-} timeline: {
-    UsageEntry.sample()
-    UsageEntry.sample(unified: true)
-}
-
-#Preview(as: .systemLarge) {
-    UsageOverviewWidget()
-} timeline: {
-    UsageEntry.sample()
-    UsageEntry.sample(unified: true)
-}
