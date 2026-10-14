@@ -31,8 +31,8 @@ final class AppModel: ObservableObject {
         let d: Double = 86_400
         let s: [ServiceKind: ServiceSnapshot] = [
             .grokBot: ServiceSnapshot(kind: .grokBot, windows: [
-                UsageWindow(label: "Weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
-                extras: ["Plan: Ultra", "Cursor plan: ultra", "On-demand: enabled"], fetchedAt: now, error: nil),
+                UsageWindow(id: "grok.weekly", label: "Shared weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
+                extras: ["Plan: Ultra"], fetchedAt: now, error: nil),
             .codex: ServiceSnapshot(kind: .codex, windows: [
                 UsageWindow(label: "Weekly", usedPercent: 0, resetsAt: now.addingTimeInterval(7*d), windowSeconds: 604_800)],
                 extras: ["Plan: Plus", "Credits: 100", "Reset credits available: 2"], fetchedAt: now, error: nil),
@@ -41,10 +41,8 @@ final class AppModel: ObservableObject {
                 UsageWindow(label: "Weekly (all models)", usedPercent: 24, resetsAt: now.addingTimeInterval(3*d + 19*3600), windowSeconds: 604_800)],
                 extras: ["Extra usage: off"], fetchedAt: now, error: nil),
             .cursor: ServiceSnapshot(kind: .cursor, windows: [
-                UsageWindow(label: "Cursor Models", usedPercent: 38, resetsAt: now.addingTimeInterval(31*d)),
-                UsageWindow(label: "Other Models", usedPercent: 12, resetsAt: now.addingTimeInterval(31*d)),
-                UsageWindow(label: "Total included", usedPercent: 27, resetsAt: now.addingTimeInterval(31*d))],
-                extras: ["Plan: Ultra", "On-demand: $0.00 spent"], fetchedAt: now, error: nil),
+                UsageWindow(id: "cursor.shared", label: "Shared weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
+                extras: ["Plan: Ultra"], fetchedAt: now, error: nil, thirdPartyCents: 1234),
         ]
         SnapshotStore.saveAll(s)
         snapshots = s

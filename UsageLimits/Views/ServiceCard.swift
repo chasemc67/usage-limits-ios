@@ -17,13 +17,13 @@ struct ServiceCard: View {
                 ForEach(snapshot.windows) { window in
                     UsageWindowRow(window: window, kind: kind)
                 }
-                if !snapshot.extras.isEmpty {
-                    extrasView(snapshot.extras)
+                if !extraLines(snapshot).isEmpty {
+                    extrasView(extraLines(snapshot))
                 }
             } else if model.isRefreshing(kind) || snapshot == nil {
                 loadingContent
-            } else if let snapshot, !snapshot.extras.isEmpty {
-                extrasView(snapshot.extras)
+            } else if let snapshot, !extraLines(snapshot).isEmpty {
+                extrasView(extraLines(snapshot))
             }
 
             if signedIn, let error = snapshot?.error {
@@ -118,6 +118,11 @@ struct ServiceCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .redacted(reason: .placeholder)
+    }
+
+    private func extraLines(_ snapshot: ServiceSnapshot) -> [String] {
+        guard let cents = snapshot.thirdPartyCents else { return snapshot.extras }
+        return snapshot.extras + ["3P API spend: \(Money.dollars(cents: cents))"]
     }
 
     private func extrasView(_ extras: [String]) -> some View {

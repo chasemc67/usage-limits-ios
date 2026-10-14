@@ -75,6 +75,17 @@ token is the part after `%3A%3A` (URL-encoded `::`).
   If the plan block is missing, falls back to
   `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`
   (`planUsage`, `spendLimitUsage`, and the `*DisplayMessage` strings, parsed for `NN%`).
+* **The X Subscription (unified accounts)** – Grok, Grok Bot and Cursor share one weekly pool
+  (Grok models only). Detected when `GetSandUsageStatus` succeeds and usage-summary has no
+  `individualUsage.plan` percentages, or when `membershipType` / `cursorPlanName` /
+  `grokPlanLabel` / `subscription` / `planName` names the X Subscription. Grok Bot's window
+  is then labelled "Shared weekly" and Cursor mirrors it (`cursor.shared`) instead of the
+  billing-cycle pools. Third-party model spend (billed at API rates) comes from
+  `POST https://cursor.com/api/dashboard/get-aggregated-usage-events` (same cookie headers,
+  body `{"teamId":-1,"startDate":"<ms>","endDate":"<ms>"}`) as the sum of `totalCents` over
+  `aggregations` whose `modelIntent` isn't grok/composer/auto/default/cursor, from
+  `billingCycleStart` (or `currentPeriodStart`) to now. Omitted when unavailable. These
+  endpoints are untested against a live unified account.
 
 ### Codex (ChatGPT)
 

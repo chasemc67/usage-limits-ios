@@ -79,6 +79,9 @@ struct ServiceSnapshot: Codable, Sendable, Hashable, Identifiable {
     var extras: [String]
     var fetchedAt: Date
     var error: String?
+    /// Cursor (X Subscription): spend on third-party models at API rates this billing cycle.
+    /// Optional with a default so snapshots cached by older builds still decode.
+    var thirdPartyCents: Double? = nil
 
     var id: ServiceKind { kind }
 

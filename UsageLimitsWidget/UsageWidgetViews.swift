@@ -434,6 +434,9 @@ private struct MediumCell: View {
                     oneLineRows(windows, short: true, scales: true)
                 }
             }
+            if let cents = snapshot?.thirdPartyCents {
+                thirdPartyLine(cents)
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 7)
@@ -548,6 +551,24 @@ private struct MediumCell: View {
         }
         .font(TMX.font(size: 9))
         .lineLimit(1)
+    }
+
+    /// "3p api  $12.34": third-party model spend at API rates.
+    private func thirdPartyLine(_ cents: Double) -> some View {
+        HStack(spacing: 4) {
+            Text("3p api")
+                .foregroundStyle(TMX.fg)
+            Spacer(minLength: 4)
+            Text(Money.dollars(cents: cents))
+                .fontWeight(.bold)
+                .foregroundStyle(TMX.hi)
+                .fixedSize()
+        }
+        .font(TMX.font(size: 9))
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .frame(height: 12)
+        .padding(.top, 2)
     }
 
     /// One row per pool: label · bar · % · reset (narrow cells drop the bar).
@@ -733,6 +754,9 @@ private struct LargeTable: View {
                     row(window, kind: snapshot.kind, labelWidth: labelWidth,
                         flagged: flagged.contains("\(snapshot.kind.rawValue).\(window.id)"))
                 }
+                if let cents = snapshot.thirdPartyCents {
+                    thirdPartyRow(cents, labelWidth: labelWidth)
+                }
             }
         }
     }
@@ -761,6 +785,25 @@ private struct LargeTable: View {
                 .fixedSize()
         }
         .frame(height: 14)
+    }
+
+    /// "3p api ........ $12.34": third-party model spend at API rates.
+    private func thirdPartyRow(_ cents: Double, labelWidth: CGFloat) -> some View {
+        HStack(spacing: 6) {
+            Text("3p api")
+                .foregroundStyle(TMX.fg)
+                .fixedSize()
+                .frame(minWidth: labelWidth, alignment: .leading)
+            Spacer(minLength: 6)
+            Text(Money.dollars(cents: cents))
+                .fontWeight(.bold)
+                .foregroundStyle(TMX.hi)
+                .fixedSize()
+        }
+        .font(TMX.font(size: Self.labelSize))
+        .lineLimit(1)
+        .padding(.leading, Self.indent)
+        .frame(height: rowHeight)
     }
 
     private func row(_ window: UsageWindow, kind: ServiceKind, labelWidth: CGFloat,

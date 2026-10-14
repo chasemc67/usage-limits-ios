@@ -2,6 +2,7 @@ import Foundation
 
 struct CursorFetcher: ServiceFetcher {
     static let usageSummaryURL = URL(string: "https://cursor.com/api/usage-summary")!
+    static let aggregatedUsageURL = URL(string: "https://cursor.com/api/dashboard/get-aggregated-usage-events")!
 
     func fetch() async -> ServiceSnapshot {
         guard let raw = TokenStore.cursorSessionToken,
@@ -10,12 +11,23 @@ struct CursorFetcher: ServiceFetcher {
         }
         let jwt = CursorAuth.jwt(from: cookie)
 
+        async let summaryTask = Self.capture { try await Self.fetchSummary(cookie: cookie) }
+        async let sandTask = Self.capture {
+            guard let jwt else { throw ServiceError.notSignedIn }
+            return try await GrokBotFetcher.fetchStatus(jwt: jwt)
+        }
+        let (summaryResult, sandResult) = await (summaryTask, sandTask)
+
         var summary: JSONValue?
         var summaryError: Error?
-        do {
-            summary = try await fetchSummary(cookie: cookie)
-        } catch {
-            summaryError = error
+        switch summaryResult {
+        case .success(let json): summary = json
+        case .failure(let error): summaryError = error
+        }
+        let sand = try? sandResult.get()
+
+        if UnifiedPlan.isUnified(summary: summary, sand: sand) {
+            return await unifiedSnapshot(cookie: cookie, summary: summary, sand: sandResult)
         }
 
         var windows: [UsageWindow] = []
@@ -81,15 +93,77 @@ struct CursorFetcher: ServiceFetcher {
         return ServiceSnapshot(kind: .cursor, windows: windows, extras: extras, fetchedAt: Date(), error: nil)
     }
 
+    // MARK: - Unified (X Subscription)
+
+    /// One shared weekly pool (mirrored from GetSandUsageStatus) plus third-party API spend.
+    /// The billing-cycle pools and on-demand lines don't apply to unified accounts.
+    private func unifiedSnapshot(cookie: String, summary: JSONValue?,
+                                 sand: Result<JSONValue, Error>) async -> ServiceSnapshot {
+        var extras: [String] = []
+        if let plan = summary?["membershipType"].nonEmptyString ?? (try? sand.get())?["cursorPlanName"].nonEmptyString {
+            extras.append("Plan: \(plan.capitalized)")
+        }
+
+        let status: JSONValue
+        switch sand {
+        case .success(let json):
+            status = json
+        case .failure(let error):
+            return ServiceSnapshot(kind: .cursor, windows: [], extras: extras, fetchedAt: Date(),
+                                   error: ServiceError.message(for: error))
+        }
+
+        let window = GrokBotFetcher.weeklyWindow(from: status, id: UnifiedPlan.cursorSharedWindowID,
+                                                 label: UnifiedPlan.sharedWindowLabel)
+
+        var thirdPartyCents: Double?
+        let now = Date()
+        if let start = summary?["billingCycleStart"].date ?? status["currentPeriodStart"].date, start < now {
+            thirdPartyCents = try? await Self.fetchThirdPartyCents(cookie: cookie, start: start, end: now)
+        }
+
+        return ServiceSnapshot(kind: .cursor, windows: [window], extras: extras, fetchedAt: Date(),
+                               error: nil, thirdPartyCents: thirdPartyCents)
+    }
+
     // MARK: - Requests
 
-    private func fetchSummary(cookie: String) async throws -> JSONValue {
-        let request = HTTP.request(Self.usageSummaryURL, headers: [
+    private static func capture(_ operation: () async throws -> JSONValue) async -> Result<JSONValue, Error> {
+        do {
+            return .success(try await operation())
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private static func dashboardHeaders(cookie: String) -> [String: String] {
+        [
             "Cookie": "\(CursorAuth.cookieName)=\(cookie)",
             "Origin": "https://cursor.com",
             "Referer": "https://cursor.com/dashboard",
             "User-Agent": HTTP.browserUserAgent,
-        ])
+        ]
+    }
+
+    /// Cents spent on third-party models (billed at API rates) between `start` and `end`,
+    /// or nil when the response carries no aggregations.
+    private static func fetchThirdPartyCents(cookie: String, start: Date, end: Date) async throws -> Double? {
+        var request = HTTP.request(aggregatedUsageURL, method: "POST", headers: dashboardHeaders(cookie: cookie))
+        let body: [String: Any] = [
+            "teamId": -1,
+            "startDate": String(Int64(start.timeIntervalSince1970 * 1000)),
+            "endDate": String(Int64(end.timeIntervalSince1970 * 1000)),
+        ]
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let result = try await HTTP.send(request)
+        guard result.isSuccess, let json = result.json else { throw result.serviceError() }
+        return UnifiedPlan.thirdPartyCents(fromAggregatedUsage: json)
+    }
+
+    static func fetchSummary(cookie: String) async throws -> JSONValue {
+        let request = HTTP.request(usageSummaryURL, headers: dashboardHeaders(cookie: cookie))
         let result = try await HTTP.send(request)
         if result.status == 401 || result.status == 403 {
             throw ServiceError.sessionExpired
