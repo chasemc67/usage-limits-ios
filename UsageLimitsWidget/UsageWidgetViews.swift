@@ -439,7 +439,7 @@ private struct MediumCell: View {
                 }
             }
             if let cents = snapshot?.thirdPartyCents {
-                thirdPartyLine(cents)
+                thirdPartyLine(cents, since: snapshot?.thirdPartySince)
             }
             Spacer(minLength: 0)
         }
@@ -557,8 +557,23 @@ private struct MediumCell: View {
         .lineLimit(1)
     }
 
-    /// "3p api  $12.34": third-party model spend at API rates.
-    private func thirdPartyLine(_ cents: Double) -> some View {
+    /// "3p api  $12.34 since 10/1": third-party model spend at API rates.
+    /// Drops the "since" part rather than squeezing the amount when the cell is narrow.
+    private func thirdPartyLine(_ cents: Double, since: Date?) -> some View {
+        ViewThatFits(in: .horizontal) {
+            if let since {
+                thirdPartyLineContent(cents, since: since)
+            }
+            thirdPartyLineContent(cents, since: nil)
+        }
+        .font(TMX.font(size: 9))
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .frame(height: 12)
+        .padding(.top, 2)
+    }
+
+    private func thirdPartyLineContent(_ cents: Double, since: Date?) -> some View {
         HStack(spacing: 4) {
             Text("3p api")
                 .foregroundStyle(TMX.fg)
@@ -567,12 +582,12 @@ private struct MediumCell: View {
                 .fontWeight(.bold)
                 .foregroundStyle(TMX.hi)
                 .fixedSize()
+            if let since {
+                Text("since \(Fmt.numericMonthDay(since))")
+                    .foregroundStyle(TMX.dim)
+                    .fixedSize()
+            }
         }
-        .font(TMX.font(size: 9))
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-        .frame(height: 12)
-        .padding(.top, 2)
     }
 
     /// One row per pool: label · bar · % · reset (narrow cells drop the bar).
@@ -759,7 +774,7 @@ private struct LargeTable: View {
                         flagged: flagged.contains("\(snapshot.kind.rawValue).\(window.id)"))
                 }
                 if let cents = snapshot.thirdPartyCents {
-                    thirdPartyRow(cents, labelWidth: labelWidth)
+                    thirdPartyRow(cents, since: snapshot.thirdPartySince, labelWidth: labelWidth)
                 }
             }
         }
@@ -791,8 +806,22 @@ private struct LargeTable: View {
         .frame(height: 14)
     }
 
-    /// "3p api ........ $12.34": third-party model spend at API rates.
-    private func thirdPartyRow(_ cents: Double, labelWidth: CGFloat) -> some View {
+    /// "3p api ........ $12.34 since 10/1": third-party model spend at API rates.
+    /// Drops the "since" part rather than squeezing the amount when the row is tight.
+    private func thirdPartyRow(_ cents: Double, since: Date?, labelWidth: CGFloat) -> some View {
+        ViewThatFits(in: .horizontal) {
+            if let since {
+                thirdPartyRowContent(cents, since: since, labelWidth: labelWidth)
+            }
+            thirdPartyRowContent(cents, since: nil, labelWidth: labelWidth)
+        }
+        .font(TMX.font(size: Self.labelSize))
+        .lineLimit(1)
+        .padding(.leading, Self.indent)
+        .frame(height: rowHeight)
+    }
+
+    private func thirdPartyRowContent(_ cents: Double, since: Date?, labelWidth: CGFloat) -> some View {
         HStack(spacing: 6) {
             Text("3p api")
                 .foregroundStyle(TMX.fg)
@@ -803,11 +832,12 @@ private struct LargeTable: View {
                 .fontWeight(.bold)
                 .foregroundStyle(TMX.hi)
                 .fixedSize()
+            if let since {
+                Text("since \(Fmt.numericMonthDay(since))")
+                    .foregroundStyle(TMX.dim)
+                    .fixedSize()
+            }
         }
-        .font(TMX.font(size: Self.labelSize))
-        .lineLimit(1)
-        .padding(.leading, Self.indent)
-        .frame(height: rowHeight)
     }
 
     private func row(_ window: UsageWindow, kind: ServiceKind, labelWidth: CGFloat,

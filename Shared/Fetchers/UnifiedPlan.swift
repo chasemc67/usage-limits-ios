@@ -119,6 +119,7 @@ extension UnifiedPlan {
             result = grok
             result.extras = grok.extras.filter { !$0.hasPrefix("Cursor plan:") }
             result.thirdPartyCents = cursor?.thirdPartyCents
+            result.thirdPartySince = cursor?.thirdPartySince
             result.error = cursor?.error ?? grok.error
         } else if let cursor {
             result = cursor

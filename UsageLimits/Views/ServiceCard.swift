@@ -122,7 +122,8 @@ struct ServiceCard: View {
 
     private func extraLines(_ snapshot: ServiceSnapshot) -> [String] {
         guard let cents = snapshot.thirdPartyCents else { return snapshot.extras }
-        return snapshot.extras + ["3P API spend: \(Money.dollars(cents: cents))"]
+        let since = snapshot.thirdPartySince.map { " since \(Fmt.monthDay($0))" } ?? ""
+        return snapshot.extras + ["3P API spend: \(Money.dollars(cents: cents))\(since)"]
     }
 
     private func extrasView(_ extras: [String]) -> some View {

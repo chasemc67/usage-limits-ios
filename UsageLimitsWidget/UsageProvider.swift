@@ -190,7 +190,9 @@ extension UsageEntry {
             let shared = UsageWindow(id: UnifiedPlan.cursorSharedWindowID, label: UnifiedPlan.sharedWindowLabel,
                                      usedPercent: 20, resetsAt: now.addingTimeInterval(3 * day), windowSeconds: 604_800)
             snapshots[.cursor] = ServiceSnapshot(kind: .cursor, windows: [shared], extras: ["Plan: Ultra"],
-                                                 fetchedAt: now, error: nil, thirdPartyCents: 1234, unified: true)
+                                                 fetchedAt: now, error: nil, thirdPartyCents: 1234,
+                                                 thirdPartySince: Calendar.current.dateInterval(of: .month, for: now)?.start,
+                                                 unified: true)
             snapshots[.grokBot] = nil
         }
         return UsageEntry(date: now, snapshots: snapshots, provider: provider)

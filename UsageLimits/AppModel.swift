@@ -42,7 +42,8 @@ final class AppModel: ObservableObject {
                 extras: ["Extra usage: off"], fetchedAt: now, error: nil),
             .cursor: ServiceSnapshot(kind: .cursor, windows: [
                 UsageWindow(id: "cursor.shared", label: "Shared weekly", usedPercent: 20, resetsAt: now.addingTimeInterval(3*d + 22*3600), windowSeconds: 604_800)],
-                extras: ["Plan: Ultra"], fetchedAt: now, error: nil, thirdPartyCents: 1234, unified: true),
+                extras: ["Plan: Ultra"], fetchedAt: now, error: nil, thirdPartyCents: 1234,
+                thirdPartySince: Calendar.current.dateInterval(of: .month, for: now)?.start, unified: true),
         ]
         SnapshotStore.saveAll(s)
         snapshots = s

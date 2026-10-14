@@ -36,6 +36,20 @@ enum Fmt {
         return formatter.string(from: date)
     }
 
+    /// "Oct 1".
+    static func monthDay(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+
+    /// "10/1".
+    static func numericMonthDay(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: date)
+    }
+
     static func percent(_ value: Double) -> String {
         "\(Int(value.rounded()))%"
     }

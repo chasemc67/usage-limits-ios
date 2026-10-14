@@ -118,13 +118,16 @@ struct CursorFetcher: ServiceFetcher {
                                                  label: UnifiedPlan.sharedWindowLabel)
 
         var thirdPartyCents: Double?
+        var thirdPartySince: Date?
         let now = Date()
         if let start = summary?["billingCycleStart"].date ?? status["currentPeriodStart"].date, start < now {
             thirdPartyCents = try? await Self.fetchThirdPartyCents(cookie: cookie, start: start, end: now)
+            if thirdPartyCents != nil { thirdPartySince = start }
         }
 
         return ServiceSnapshot(kind: .cursor, windows: [window], extras: extras, fetchedAt: Date(),
-                               error: nil, thirdPartyCents: thirdPartyCents, unified: true)
+                               error: nil, thirdPartyCents: thirdPartyCents, thirdPartySince: thirdPartySince,
+                               unified: true)
     }
 
     // MARK: - Requests
