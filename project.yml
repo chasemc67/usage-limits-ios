@@ -95,14 +95,31 @@ targets:
         ENABLE_PREVIEWS: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
 
+  # Logic tests: compiles Shared directly (no host app), so only pure parsing/detection is exercised.
+  UsageLimitsTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: UsageLimitsTests
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.AnomalousResearch.UsageLimitsTests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   UsageLimits:
     build:
       targets:
         UsageLimits: all
         UsageLimitsWidget: all
+        UsageLimitsTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - UsageLimitsTests
     profile:
       config: Release
     analyze:

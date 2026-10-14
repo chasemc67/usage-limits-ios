@@ -36,8 +36,8 @@ struct CursorFetcher: ServiceFetcher {
         var cycleEnd = summary?["billingCycleEnd"].date
 
         if let summary {
-            if let membership = summary["membershipType"].nonEmptyString {
-                extras.append("Plan: \(membership.capitalized)")
+            if let membership = UnifiedPlan.planDisplayName(summary["membershipType"].nonEmptyString) {
+                extras.append("Plan: \(membership)")
             }
             windows = Self.planWindows(summary["individualUsage"]["plan"], messages: nil,
                                        start: cycleStart, end: cycleEnd)
@@ -72,8 +72,8 @@ struct CursorFetcher: ServiceFetcher {
                     let used = spend["individualUsed"].double ?? max(0, limit - remaining)
                     extras.append("On-demand: \(Money.dollars(cents: used)) of \(Money.dollars(cents: limit)) (\(Money.dollars(cents: remaining)) left)")
                 }
-                if summary == nil, let membership = period["membershipType"].nonEmptyString {
-                    extras.append("Plan: \(membership.capitalized)")
+                if summary == nil, let membership = UnifiedPlan.planDisplayName(period["membershipType"].nonEmptyString) {
+                    extras.append("Plan: \(membership)")
                 }
             } catch {
                 if summary == nil {
@@ -100,34 +100,26 @@ struct CursorFetcher: ServiceFetcher {
     /// The billing-cycle pools and on-demand lines don't apply to unified accounts.
     private func unifiedSnapshot(cookie: String, summary: JSONValue?,
                                  sand: Result<JSONValue, Error>) async -> ServiceSnapshot {
-        var extras: [String] = []
-        if let plan = summary?["membershipType"].nonEmptyString ?? (try? sand.get())?["cursorPlanName"].nonEmptyString {
-            extras.append("Plan: \(plan.capitalized)")
-        }
-
         let status: JSONValue
         switch sand {
         case .success(let json):
             status = json
         case .failure(let error):
-            return ServiceSnapshot(kind: .cursor, windows: [], extras: extras, fetchedAt: Date(),
-                                   error: ServiceError.message(for: error), unified: true)
+            return ServiceSnapshot(kind: .cursor, windows: [], extras: UnifiedPlan.planExtras(summary: summary, sand: nil),
+                                   fetchedAt: Date(), error: ServiceError.message(for: error), unified: true)
         }
 
-        let window = GrokBotFetcher.weeklyWindow(from: status, id: UnifiedPlan.cursorSharedWindowID,
-                                                 label: UnifiedPlan.sharedWindowLabel)
-
+        // 3P spend is fetched only here, so it depends on unified detection succeeding.
         var thirdPartyCents: Double?
         var thirdPartySince: Date?
         let now = Date()
-        if let start = summary?["billingCycleStart"].date ?? status["currentPeriodStart"].date, start < now {
+        if let start = UnifiedPlan.thirdPartyWindowStart(summary: summary, sand: status, now: now) {
             thirdPartyCents = try? await Self.fetchThirdPartyCents(cookie: cookie, start: start, end: now)
             if thirdPartyCents != nil { thirdPartySince = start }
         }
 
-        return ServiceSnapshot(kind: .cursor, windows: [window], extras: extras, fetchedAt: Date(),
-                               error: nil, thirdPartyCents: thirdPartyCents, thirdPartySince: thirdPartySince,
-                               unified: true)
+        return UnifiedPlan.cursorSnapshot(summary: summary, sand: status, thirdPartyCents: thirdPartyCents,
+                                          thirdPartySince: thirdPartySince)
     }
 
     // MARK: - Requests
@@ -153,13 +145,8 @@ struct CursorFetcher: ServiceFetcher {
     /// or nil when the response carries no aggregations.
     private static func fetchThirdPartyCents(cookie: String, start: Date, end: Date) async throws -> Double? {
         var request = HTTP.request(aggregatedUsageURL, method: "POST", headers: dashboardHeaders(cookie: cookie))
-        let body: [String: Any] = [
-            "teamId": -1,
-            "startDate": String(Int64(start.timeIntervalSince1970 * 1000)),
-            "endDate": String(Int64(end.timeIntervalSince1970 * 1000)),
-        ]
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try JSONSerialization.data(withJSONObject: UnifiedPlan.aggregatedUsageBody(start: start, end: end))
 
         let result = try await HTTP.send(request)
         guard result.isSuccess, let json = result.json else { throw result.serviceError() }
